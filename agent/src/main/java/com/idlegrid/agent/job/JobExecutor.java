@@ -85,6 +85,14 @@ public class JobExecutor {
      */
     private final AtomicBoolean             evicted            = new AtomicBoolean(false);
 
+    /**
+     * The running "docker logs -f" process.
+     * Stored here so evict() can destroy it immediately on eviction rather than
+     * waiting for the read loop to notice EOF (which already happens quickly, but
+     * this is belt-and-suspenders).
+     */
+    private final AtomicReference<Process>  logsProcess        = new AtomicReference<>(null);
+
     public JobExecutor(AgentConfig config, HttpUtil http) {
         this.config = config;
         this.http   = http;
@@ -168,11 +176,10 @@ public class JobExecutor {
         LOG.info("Scanning for orphaned IdleGrid containers from previous run...");
         try {
             // docker ps -a -q --filter label=idlegrid.session
-            // Lists ALL containers (including stopped) with our label
+            // Do NOT redirectErrorStream — keep stdout (IDs) separate from stderr (error msgs)
             Process ps = new ProcessBuilder(
                     "docker", "ps", "-a", "-q",
                     "--filter", "label=idlegrid.session")
-                    .redirectErrorStream(true)
                     .start();
 
             int killed = 0;
@@ -181,13 +188,22 @@ public class JobExecutor {
                 String id;
                 while ((id = r.readLine()) != null) {
                     id = id.trim();
-                    if (id.isEmpty()) continue;
+                    // docker ps -q prints only 12-char (short) or 64-char (full) hex IDs
+                    // Validate the format so Docker daemon error messages are never treated as IDs
+                    if (!id.matches("[0-9a-f]{12,64}")) continue;
                     LOG.warning("Orphaned container found: " + id + " — killing");
                     killContainer(id);
-                    // Also force-remove (container might be stopped, not running)
                     new ProcessBuilder("docker", "rm", "-f", id)
                             .start().waitFor(5, TimeUnit.SECONDS);
                     killed++;
+                }
+            }
+            // Drain stderr at FINE level (Docker-not-running is normal at startup on dev machines)
+            try (BufferedReader err = new BufferedReader(
+                    new InputStreamReader(ps.getErrorStream()))) {
+                String line;
+                while ((line = err.readLine()) != null) {
+                    if (!line.isBlank()) LOG.fine("docker ps stderr: " + line);
                 }
             }
 
@@ -252,9 +268,11 @@ public class JobExecutor {
             LOG.info("Container started: " + containerId + " for job " + job.getJobId());
 
             // 4. Stream logs to per-job file + capture output for result reporting
+            //    Store logsProc so evict() can destroy it if needed.
             Process logsProc = new ProcessBuilder("docker", "logs", "-f", containerId)
                     .redirectErrorStream(true) // merge stderr into stdout
                     .start();
+            logsProcess.set(logsProc);
 
             StringBuilder capturedOutput = new StringBuilder();
             try (PrintWriter logWriter = new PrintWriter(
@@ -268,10 +286,15 @@ public class JobExecutor {
                     logWriter.println(stamped);
                     capturedOutput.append(line).append("\n");
                 }
+            } finally {
+                logsProcess.set(null);
+                logsProc.destroy(); // no-op if already exited; belt-and-suspenders cleanup
             }
 
-            // 5. Get exit code via docker wait
-            //    Returns immediately if container already finished (e.g. after eviction kill)
+            // 5. Get exit code via docker wait.
+            //    IMPORTANT: --rm is NOT used on docker run, so the container still exists
+            //    after it exits and docker wait can collect the exit code reliably.
+            //    We do an explicit `docker rm` in the finally block below.
             int exitCode = -1;
             try {
                 Process waitProc = new ProcessBuilder("docker", "wait", containerId)
@@ -306,6 +329,20 @@ public class JobExecutor {
                         "Agent internal error: " + e.getMessage(), -1);
             }
         } finally {
+            // Explicit docker rm — required because we don't use --rm on docker run.
+            // (--rm would race with docker wait: container deleted before wait reads exit code.)
+            String cid = runningContainerId.get();
+            if (cid != null) {
+                try {
+                    new ProcessBuilder("docker", "rm", "-f", cid)
+                            .redirectErrorStream(true)
+                            .start()
+                            .waitFor(5, TimeUnit.SECONDS);
+                    LOG.fine("Removed container: " + cid);
+                } catch (Exception e) {
+                    LOG.fine("docker rm " + cid + " failed (may already be gone): " + e.getMessage());
+                }
+            }
             // Always clear running state so the next poll can accept a new job
             runningContainerId.set(null);
             runningJob.set(null);
@@ -346,8 +383,11 @@ public class JobExecutor {
         List<String> cmd = new ArrayList<>();
         cmd.add("docker");
         cmd.add("run");
-        cmd.add("-d");         // detached — prints container ID and returns immediately
-        cmd.add("--rm");       // auto-remove on exit (Docker cleans up, we just kill if needed)
+        cmd.add("-d");
+        // NOTE: do NOT add --rm here.
+        // --rm causes Docker to delete the container the moment it exits, which races with
+        // `docker wait` and causes it to fail (exit code becomes -1, job reported FAILED).
+        // We do an explicit `docker rm -f` in the finally block instead.
         cmd.add("--cpus=" + cpuStr);
         cmd.add("--memory=" + memStr);
         cmd.add("--network=none");

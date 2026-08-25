@@ -101,16 +101,20 @@ public class HeartbeatService implements Runnable {
 
     /**
      * Builds the heartbeat JSON payload manually.
-     * We avoid pulling in Jackson just for a fixed-shape heartbeat payload.
+     *
+     * <p>cpuFree is sent as an integer percentage (0–100) to match the backend's
+     * {@code HeartbeatRequest.cpuFree} which is declared as {@code int}.
+     * Jackson would truncate a double anyway, so we make this explicit.
      */
-    private String buildPayload(double cpuFree, long ramFree, long diskFree,
+    private String buildPayload(double cpuFreeDouble, long ramFree, long diskFree,
                                  String idleState, String status) {
+        int cpuFreeInt = (int) Math.round(cpuFreeDouble); // e.g. 75.3 → 75
         return String.format("""
                 {
                   "nodeId":     "%s",
                   "hostname":   "%s",
                   "ip":         "%s",
-                  "cpuFree":    %.1f,
+                  "cpuFree":    %d,
                   "ramFreeMb":  %d,
                   "diskFreeMb": %d,
                   "status":     "%s",
@@ -119,7 +123,7 @@ public class HeartbeatService implements Runnable {
                 config.getNodeId(),
                 getHostname(),
                 config.getLocalIp(),
-                cpuFree,
+                cpuFreeInt,
                 ramFree,
                 diskFree,
                 status,

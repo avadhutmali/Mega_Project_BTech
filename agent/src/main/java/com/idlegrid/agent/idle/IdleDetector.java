@@ -216,4 +216,17 @@ public class IdleDetector implements Runnable {
         LOG.info("Idle detector scheduled every " + intervalSeconds +
                  "s (threshold=" + (thresholdMs / 1000) + "s)");
     }
+
+    /**
+     * Flushes and closes the transition log file.
+     * Call from the JVM shutdown hook to release the file handle cleanly.
+     * Data is not lost even without calling this (auto-flush is enabled),
+     * but the OS file handle is properly released.
+     */
+    public void close() {
+        if (transitionLog != null) {
+            transitionLog.flush();
+            transitionLog.close();
+        }
+    }
 }

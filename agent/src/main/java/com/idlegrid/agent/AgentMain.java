@@ -119,6 +119,7 @@ public class AgentMain {
             http.post("/nodes/heartbeat", String.format(
                     "{\"nodeId\":\"%s\",\"ip\":\"%s\",\"status\":\"OFFLINE\"}",
                     config.getNodeId(), config.getLocalIp()));
+            idleDet.close(); // flush + close idle_transitions.log file handle
             scheduler.shutdownNow();
             log.info("Agent stopped.");
         }, "shutdown-hook"));

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IdleGrid — Cluster Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d1117;
+    --panel:#12181f;
+    --panel-2:#161d26;
+    --line: rgba(230,237,243,0.09);
+    --line-strong: rgba(230,237,243,0.16);
+    --text:#e6edf3;
+    --text-dim:#8b98a5;
+    --text-faint:#5b6773;
+    --online:#3fb950;
+    --offline:#484f58;
+    --queued:#8b98a5;
+    --assigned:#d29922;
+    --running:#58a6ff;
+    --done:#3fb950;
+    --failed:#f85149;
+    --accent:#58a6ff;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+  }
+  .wrap{
+    max-width:1100px;
+    margin:0 auto;
+    padding:36px 28px 80px;
+  }
+  header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    margin-bottom:6px;
+  }
+  h1{
+    font-size:22px;
+    font-weight:700;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+  .conn{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--text-faint);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .dot{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--online);
+    box-shadow:0 0 8px var(--online);
+  }
+  .dot.bad{ background:var(--failed); box-shadow:0 0 8px var(--failed); }
+  .sub{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--text-faint);
+    margin-bottom:32px;
+  }
+
+  .section-title{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+    margin:0 0 14px;
+  }
+
+  .nodes{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
+    gap:12px;
+    margin-bottom:40px;
+  }
+  .node-card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:16px 16px 14px;
+    position:relative;
+    overflow:hidden;
+  }
+  .node-card::before{
+    content:'';
+    position:absolute; left:0; top:0; bottom:0; width:3px;
+    background:var(--offline);
+  }
+  .node-card.online::before{ background:var(--online); }
+  .node-id{
+    font-family:var(--mono); font-weight:600; font-size:14px;
+  }
+  .node-ip{
+    font-family:var(--mono); font-size:11px; color:var(--text-faint); margin-top:2px;
+  }
+  .node-status{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+    margin-top:12px; padding:3px 8px; border-radius:20px;
+    border:1px solid var(--line-strong); color:var(--text-dim);
+  }
+  .node-status .sw{ width:6px; height:6px; border-radius:50%; background:var(--offline); }
+  .node-card.online .node-status .sw{ background:var(--online); }
+  .node-card.online .node-status{ color:var(--online); border-color:rgba(63,185,80,0.3); }
+  .cap{ margin-top:12px; font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+  .cap div{ margin-bottom:3px; }
+  .empty-note{
+    font-family:var(--mono); font-size:12px; color:var(--text-faint);
+    padding:20px; border:1px dashed var(--line-strong); border-radius:8px;
+  }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:22px 24px;
+    margin-bottom:32px;
+  }
+  .form-row{
+    display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;
+  }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{
+    font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--text-faint);
+  }
+  .field input{
+    background:var(--panel-2);
+    border:1px solid var(--line-strong);
+    border-radius:6px;
+    color:var(--text);
+    font-family:var(--mono);
+    font-size:13px;
+    padding:9px 10px;
+    outline:none;
+  }
+  .field input:focus{ border-color:var(--accent); }
+  .field.cmd{ flex:1; min-width:220px; }
+  button{
+    background:var(--accent);
+    color:#0d1117;
+    border:none;
+    border-radius:6px;
+    font-family:var(--sans);
+    font-weight:700;
+    font-size:13px;
+    padding:10px 18px;
+    cursor:pointer;
+  }
+  button:hover{ opacity:0.9; }
+  button:disabled{ opacity:0.5; cursor:default; }
+  .submit-msg{
+    font-family:var(--mono); font-size:11px; color:var(--online); margin-top:10px; min-height:14px;
+  }
+  .submit-msg.err{ color:var(--failed); }
+
+  table{ width:100%; border-collapse:collapse; }
+  th{
+    text-align:left; font-family:var(--mono); font-size:10px; color:var(--text-faint);
+    text-transform:uppercase; letter-spacing:.06em; padding:8px 10px;
+    border-bottom:1px solid var(--line-strong);
+  }
+  td{
+    padding:10px 10px; border-bottom:1px solid var(--line);
+    font-family:var(--mono); font-size:12px; color:var(--text-dim);
+    vertical-align:middle;
+  }
+  td.mono-id{ color:var(--text); }
+  .badge{
+    display:inline-flex; align-items:center; gap:6px;
+    padding:3px 9px; border-radius:20px; font-size:10px; text-transform:uppercase; letter-spacing:.05em;
+    border:1px solid var(--line-strong);
+  }
+  .badge .sw{ width:6px; height:6px; border-radius:50%; }
+  .badge.QUEUED{ color:var(--queued); }
+  .badge.QUEUED .sw{ background:var(--queued); }
+  .badge.ASSIGNED{ color:var(--assigned); border-color:rgba(210,153,34,0.35); }
+  .badge.ASSIGNED .sw{ background:var(--assigned); }
+  .badge.RUNNING{ color:var(--running); border-color:rgba(88,166,255,0.35); }
+  .badge.RUNNING .sw{ background:var(--running); }
+  .badge.DONE{ color:var(--done); border-color:rgba(63,185,80,0.35); }
+  .badge.DONE .sw{ background:var(--done); }
+  .badge.FAILED{ color:var(--failed); border-color:rgba(248,81,73,0.35); }
+  .badge.FAILED .sw{ background:var(--failed); }
+
+  footer{
+    font-family:var(--mono); font-size:11px; color:var(--text-faint); text-align:center; margin-top:20px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>IdleGrid</h1>
+    <div class="conn"><span class="dot" id="connDot"></span><span id="connText">connecting…</span></div>
+  </header>
+  <div class="sub">Cluster dashboard &middot; Phase 1 demo &middot; polling every 2s</div>
+
+  <div class="section-title">Nodes</div>
+  <div class="nodes" id="nodes"></div>
+
+  <div class="panel">
+    <div class="section-title" style="margin-bottom:16px;">Submit a job</div>
+    <div class="form-row">
+      <div class="field"><label>CPU (cores)</label><input id="cpuReq" type="number" value="1" min="1"></div>
+      <div class="field"><label>RAM (MB)</label><input id="ramReq" type="number" value="1024" min="1"></div>
+      <div class="field cmd"><label>Command</label><input id="command" type="text" value="echo hello from idlegrid"></div>
+      <button id="submitBtn">Submit job</button>
+    </div>
+    <div class="submit-msg" id="submitMsg"></div>
+  </div>
+
+  <div class="section-title">Jobs</div>
+  <div class="panel" style="padding:0;">
+    <table>
+      <thead>
+        <tr><th>Job ID</th><th>Status</th><th>CPU</th><th>RAM</th><th>Command</th><th>Node</th><th>Result</th></tr>
+      </thead>
+      <tbody id="jobsBody"></tbody>
+    </table>
+  </div>
+
+  <footer>Master: <span id="masterUrl"></span></footer>
+</div>
+
+<script>
+// Change this if the Master isn't running on localhost — e.g. when pointing
+// the dashboard at a Master running on a laptop elsewhere on the lab LAN.
+const MASTER_URL = "http://localhost:8080";
+document.getElementById('masterUrl').textContent = MASTER_URL;
+
+async function fetchJson(path, opts) {
+  const res = await fetch(MASTER_URL + path, opts);
+  if (!res.ok && res.status !== 204) throw new Error(res.status + " " + res.statusText);
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+function renderNodes(nodes) {
+  const el = document.getElementById('nodes');
+  if (!nodes || nodes.length === 0) {
+    el.innerHTML = '<div class="empty-note">No nodes have sent a heartbeat yet. Waiting for an Agent to connect…</div>';
+    return;
+  }
+  el.innerHTML = nodes.map(n => `
+    <div class="node-card ${n.status === 'ONLINE' ? 'online' : ''}">
+      <div class="node-id">${n.id}</div>
+      <div class="node-ip">${n.ip || '—'}</div>
+      <div class="node-status"><span class="sw"></span>${n.status}</div>
+      <div class="cap">
+        <div>CPU free: ${n.cpuFree}</div>
+        <div>RAM free: ${n.ramFreeMb} MB</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderJobs(jobs) {
+  const body = document.getElementById('jobsBody');
+  if (!jobs || jobs.length === 0) {
+    body.innerHTML = '<tr><td colspan="7" style="color:var(--text-faint); font-style:italic;">No jobs submitted yet.</td></tr>';
+    return;
+  }
+  const sorted = [...jobs].reverse();
+  body.innerHTML = sorted.map(j => `
+    <tr>
+      <td class="mono-id">${j.id.slice(0, 8)}</td>
+      <td><span class="badge ${j.status}"><span class="sw"></span>${j.status}</span></td>
+      <td>${j.cpuReq}</td>
+      <td>${j.ramReqMb} MB</td>
+      <td>${escapeHtml(j.command)}</td>
+      <td>${j.assignedNode || '—'}</td>
+      <td>${j.result ? escapeHtml(j.result) : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function poll() {
+  try {
+    const [nodes, jobs] = await Promise.all([
+      fetchJson('/nodes/summary'),
+      fetchJson('/jobs'),
+    ]);
+    renderNodes(nodes);
+    renderJobs(jobs);
+    document.getElementById('connDot').classList.remove('bad');
+    document.getElementById('connText').textContent = 'connected';
+  } catch (e) {
+    document.getElementById('connDot').classList.add('bad');
+    document.getElementById('connText').textContent = 'cannot reach Master at ' + MASTER_URL;
+  }
+}
+
+document.getElementById('submitBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('submitBtn');
+  const msg = document.getElementById('submitMsg');
+  const cpuReq = parseInt(document.getElementById('cpuReq').value, 10);
+  const ramReqMb = parseInt(document.getElementById('ramReq').value, 10);
+  const command = document.getElementById('command').value;
+
+  btn.disabled = true;
+  msg.classList.remove('err');
+  msg.textContent = 'submitting…';
+  try {
+    const res = await fetchJson('/jobs/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cpuReq, ramReqMb, command }),
+    });
+    msg.textContent = 'submitted — job ' + res.jobId.slice(0, 8);
+    poll();
+  } catch (e) {
+    msg.classList.add('err');
+    msg.textContent = 'failed to submit: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+poll();
+setInterval(poll, 2000);
+</script>
+</body>
+</html>

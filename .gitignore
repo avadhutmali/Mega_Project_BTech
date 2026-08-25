@@ -1,0 +1,22 @@
+# Java / Spring Boot
+target/
+*.class
+*.jar
+!gradle-wrapper.jar
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.env
+
+# Python (agent, if chosen)
+__pycache__/
+*.pyc
+.venv/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

@@ -16,7 +16,7 @@ REM    dist\IdleGridAgent-windows.zip         ← distribute this zip
 REM ============================================================
 setlocal
 
-set MVN="C:\Program Files\JetBrains\IntelliJ IDEA 2025.3.1\plugins\maven\lib\maven3\bin\mvn.cmd"
+set MVN=.\mvnw.cmd
 set JPACKAGE="C:\Program Files\Microsoft\jdk-17.0.13.11-hotspot\bin\jpackage.exe"
 set JAR=agent-1.0-SNAPSHOT-exec.jar
 set DIST=dist

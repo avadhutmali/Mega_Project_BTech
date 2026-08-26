@@ -20,8 +20,12 @@ and executing assigned jobs inside a resource-capped Docker container.
 
 ```bat
 cd agent
-mvn package -q
+.\mvnw.cmd package -q
 ```
+
+> **First run only:** `mvnw.cmd` downloads Maven 3.9.6 (~10 MB) to your home directory
+> (`~/.m2/wrapper/dists/`) and caches it. Every subsequent build uses the cached copy.
+> No Maven installation needed on any lab PC or CI machine.
 
 This produces `target/agent-1.0-SNAPSHOT-exec.jar` — a fat JAR with all dependencies.
 

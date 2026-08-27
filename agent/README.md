@@ -7,11 +7,30 @@ and executing assigned jobs inside a resource-capped Docker container.
 
 ---
 
-## 📦 Distributable Download
+## ⬇️ Download pre-built agent (no build needed)
 
-Click the link below to download the compiled agent ZIP package from the `dist` folder:
+> **Just want to run the agent on a lab PC?**
+> Download the ZIP below — it contains the ready-to-run JAR, launcher script, and
+> default config. **No Java build or Maven required** on the target machine — only
+> Java 17+ must be installed.
 
-⬇️ **[Download IdleGridAgent-windows.zip](dist/IdleGridAgent-windows.zip)**
+**[⬇ Download IdleGridAgent-windows.zip](https://github.com/avadhutmali/Mega_Project_BTech/raw/main/agent/IdleGridAgent-windows.zip)**
+
+### How to deploy in 3 steps
+
+1. **Download & extract** `IdleGridAgent-windows.zip` anywhere on the lab PC
+   (e.g. `C:\IdleGridAgent\`)
+2. **Edit `agent.properties`** — set the Master's IP:
+   ```properties
+   master.url=http://<master-laptop-ip>:8081
+   ```
+3. **Run** — double-click or open a terminal in the extracted folder:
+   ```bat
+   run.bat
+   ```
+
+That's it. The agent starts heartbeating to the Master immediately.
+>>>>>>> f733aa53803f65ea78ae01533708d7fa978e329b
 
 ---
 
@@ -55,7 +74,7 @@ This creates the distribution ZIP in `dist/`:
 Copy `src/main/resources/agent.properties` to the `agent/` directory and edit:
 
 ```properties
-master.url=http://<master-ip>:8080
+master.url=http://<master-ip>:8081
 idle.threshold.seconds=300
 ```
 

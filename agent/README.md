@@ -7,6 +7,14 @@ and executing assigned jobs inside a resource-capped Docker container.
 
 ---
 
+## 📦 Distributable Download
+
+Click the link below to download the compiled agent ZIP package from the `dist` folder:
+
+⬇️ **[Download IdleGridAgent-windows.zip](dist/IdleGridAgent-windows.zip)**
+
+---
+
 ## Quick start
 
 ### Prerequisites (per lab PC — set up once)
@@ -28,6 +36,19 @@ cd agent
 > No Maven installation needed on any lab PC or CI machine.
 
 This produces `target/agent-1.0-SNAPSHOT-exec.jar` — a fat JAR with all dependencies.
+
+### Package (Create Standalone ZIP)
+
+To build a standalone Windows executable (`IdleGridAgent.exe`) with a bundled JRE into a distributable ZIP package:
+
+```bat
+cd agent
+.\package.bat
+```
+
+This creates the distribution ZIP in `dist/`:
+⬇️ **[Download dist/IdleGridAgent-windows.zip](dist/IdleGridAgent-windows.zip)**
+
 
 ### Configure (optional)
 

@@ -14,7 +14,7 @@ and executing assigned jobs inside a resource-capped Docker container.
 > default config. **No Java build or Maven required** on the target machine — only
 > Java 17+ must be installed.
 
-**[⬇ Download IdleGridAgent-windows.zip](https://github.com/avadhutmali/Mega_Project_BTech/raw/main/agent/IdleGridAgent-windows.zip)**
+**[⬇ Download IdleGridAgent-windows.zip](dist/IdleGridAgent-windows.zip)** *(or [Download via GitHub](https://github.com/avadhutmali/Mega_Project_BTech/raw/main/agent/dist/IdleGridAgent-windows.zip))*
 
 ### How to deploy in 3 steps
 
@@ -30,7 +30,6 @@ and executing assigned jobs inside a resource-capped Docker container.
    ```
 
 That's it. The agent starts heartbeating to the Master immediately.
->>>>>>> f733aa53803f65ea78ae01533708d7fa978e329b
 
 ---
 

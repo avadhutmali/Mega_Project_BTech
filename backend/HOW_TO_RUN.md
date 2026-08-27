@@ -1,64 +1,67 @@
-# Running this locally (before lab PC access)
+# Running the backend (Master server)
 
 ## Prerequisites
 
 - JDK 17+ installed
-- Maven (or just use the included `mvnw` wrapper if you generate one via
-  `mvn -N io.takari:maven:wrapper` — not included here to keep the zip small)
+- No Maven install needed — `mvnw.cmd` downloads it automatically on first run
 
 ## Run it
 
-```bash
-mvn spring-boot:run
+```powershell
+cd backend
+.\mvnw.cmd spring-boot:run
 ```
 
-Starts on `http://localhost:8080`.
+Starts on **`http://localhost:8081`**
+
+> **Note:** Port 8080 is occupied by Oracle TNS Listener on this machine.
+> The backend is permanently configured to use **port 8081** in `application.properties`.
 
 ## Test it end to end with curl (no Agent needed yet)
 
 1. Simulate a node heartbeat:
-```bash
-curl -X POST http://localhost:8080/nodes/heartbeat \
-  -H "Content-Type: application/json" \
-  -d '{"nodeId":"pc-1","ip":"192.168.1.101","cpuFree":1,"ramFreeMb":2048}'
+```powershell
+curl -X POST http://localhost:8081/nodes/heartbeat `
+  -H "Content-Type: application/json" `
+  -d '{"nodeId":"pc-1","ip":"192.168.1.101","cpuFree":80,"ramFreeMb":4096}'
 ```
 
 2. Check it registered:
-```bash
-curl http://localhost:8080/nodes/summary
+```powershell
+curl http://localhost:8081/nodes/summary
 ```
 
 3. Submit a job:
-```bash
-curl -X POST http://localhost:8080/jobs/submit \
-  -H "Content-Type: application/json" \
-  -d '{"cpuReq":1,"ramReqMb":1024,"command":"echo hello"}'
+```powershell
+curl -X POST http://localhost:8081/jobs/submit `
+  -H "Content-Type: application/json" `
+  -d '{"cpuReq":10,"ramReqMb":512,"command":"echo hello"}'
 ```
 Note the `jobId` in the response.
 
 4. Within ~3 seconds (the scheduler tick), check its status — it should move
    from `QUEUED` to `ASSIGNED`:
-```bash
-curl http://localhost:8080/jobs/<jobId>/status
+```powershell
+curl http://localhost:8081/jobs/<jobId>/status
 ```
 
 5. Simulate the Agent picking it up:
-```bash
-curl http://localhost:8080/agent/pc-1/assignment
+```powershell
+curl http://localhost:8081/agent/pc-1/assignment
 ```
 This should return the job and flip it to `RUNNING`.
 
 6. Simulate the Agent reporting completion:
-```bash
-curl -X POST http://localhost:8080/jobs/<jobId>/complete \
-  -H "Content-Type: application/json" \
+```powershell
+curl -X POST http://localhost:8081/jobs/<jobId>/complete `
+  -H "Content-Type: application/json" `
   -d '{"result":"hello","success":true}'
 ```
 
 7. Confirm it's `DONE` and the node's capacity was freed back up:
-```bash
-curl http://localhost:8080/jobs/<jobId>/status
-curl http://localhost:8080/nodes/summary
+```powershell
+curl http://localhost:8081/jobs/<jobId>/status
+curl http://localhost:8081/nodes/summary
 ```
 
 If all seven steps work, the full scheduling pipeline is proven — before a

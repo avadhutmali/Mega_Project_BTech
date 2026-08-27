@@ -5,6 +5,7 @@ import com.idlegrid.agent.eviction.EvictionManager;
 import com.idlegrid.agent.heartbeat.HeartbeatService;
 import com.idlegrid.agent.idle.IdleDetector;
 import com.idlegrid.agent.idle.NodeState;
+import com.idlegrid.agent.job.ContainerWatchdog;
 import com.idlegrid.agent.job.JobExecutor;
 import com.idlegrid.agent.job.JobPoller;
 import com.idlegrid.agent.resources.ResourceMonitor;
@@ -32,7 +33,8 @@ import java.util.logging.SimpleFormatter;
  *   <li>Clean up orphaned Docker containers from any previous crash (Step 10)</li>
  *   <li>Wire all services together (no framework, plain dependency injection)</li>
  *   <li>Register the eviction manager as a NodeState listener</li>
- *   <li>Schedule all three loops on a shared ScheduledExecutorService</li>
+ *   <li>Schedule all four loops on a shared ScheduledExecutorService
+ *       (heartbeat, idle-check, job-poll, container-watchdog)</li>
  *   <li>Park the main thread; loops run on daemon threads</li>
  * </ol>
  *
@@ -80,16 +82,17 @@ public class AgentMain {
         NodeState        nodeState = new NodeState();
         IdleDetector     idleDet   = new IdleDetector(config, nodeState);
         HeartbeatService heartbeat = new HeartbeatService(config, monitor, nodeState, http);
-        JobPoller        poller    = new JobPoller(config, http, executor);
-        EvictionManager  eviction  = new EvictionManager(executor);
+        JobPoller          poller    = new JobPoller(config, http, executor);
+        EvictionManager    eviction  = new EvictionManager(executor);
+        ContainerWatchdog  watchdog  = new ContainerWatchdog(executor, http);
 
         // Register eviction BEFORE starting the idle loop so no IDLE→ACTIVE
         // transitions are missed between wiring and scheduling.
         eviction.register(nodeState);
 
-        // ── 5. Schedule Loops ─────────────────────────────────────────────────
-        // 4 threads: heartbeat, idle-check, job-poll, plus one spare for eviction spillover
-        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4,
+        // ── 5. Schedule Loops ─────────────────────────────────────────────
+        // 5 threads: heartbeat, idle-check, job-poll, container-watchdog, + 1 spare
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(5,
                 runnable -> {
                     Thread t = new Thread(runnable, "agent-scheduler");
                     t.setDaemon(true); // don't block JVM shutdown
@@ -99,6 +102,7 @@ public class AgentMain {
         heartbeat.scheduleOn(scheduler);
         idleDet.scheduleOn(scheduler, config.getIdleCheckIntervalSeconds());
         poller.scheduleOn(scheduler);
+        watchdog.scheduleOn(scheduler);
 
         // ── 6. Summary Log ────────────────────────────────────────────────────
         log.info("All loops started successfully:");
@@ -109,6 +113,7 @@ public class AgentMain {
         log.info("  Idle check : every " + config.getIdleCheckIntervalSeconds()
                  + "s  (threshold=" + config.getIdleThresholdSeconds() + "s)");
         log.info("  Job poll   : every " + config.getJobPollIntervalSeconds() + "s");
+        log.info("  Watchdog   : every " + ContainerWatchdog.INTERVAL_SECONDS + "s");
         log.info("  Log dir    : " + Paths.get(config.getLogDir()).toAbsolutePath());
         log.info("Press Ctrl+C to stop.");
 

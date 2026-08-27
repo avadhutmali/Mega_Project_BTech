@@ -35,12 +35,32 @@ That's it. The agent starts heartbeating to the Master immediately.
 
 ## Quick start
 
-### Prerequisites (per lab PC — set up once)
+### Prerequisites (per lab PC — run `setup.ps1` once)
+
+> **The easiest way:** run `setup.ps1` (included in the ZIP) as Administrator — it
+> handles all prerequisites automatically.
+
+```powershell
+# In an Administrator PowerShell, from the extracted IdleGridAgent folder:
+Set-ExecutionPolicy Bypass -Scope Process -Force
+.\setup.ps1
+```
+
+`setup.ps1` will:
+- ✅ Enable WSL2 and Virtual Machine Platform Windows features
+- ✅ Download and silently install Docker Desktop
+- ✅ Configure Docker Desktop (WSL2 backend, resource limits, auto-start)
+- ✅ Check Java 17+ is installed (with install instructions if missing)
+- ✅ Run a container smoke test to confirm everything works
+
+> A **reboot** is required after WSL2 features are first enabled.
+> Re-run `setup.ps1` after rebooting — it is fully idempotent.
+
+#### Manual prerequisites (if you prefer to set up by hand)
 
 1. Java 17 or later: `java --version`
-2. Maven 3.8+: `mvn --version`
-3. WSL2 enabled and Docker Desktop installed (WSL2 backend, not Hyper-V)
-4. Docker running: `docker ps`
+2. WSL2 enabled: `wsl --set-default-version 2`
+3. Docker Desktop installed (WSL2 backend): `docker ps`
 
 ### Build
 
@@ -106,6 +126,7 @@ call blocks briefly.
 | **Heartbeat** | 3 s (default) | `POST /nodes/heartbeat` with nodeId, ip, cpuFree%, ramFreeMb, diskFreeMb, idleState |
 | **Idle check** | 10 s (default) | Calls `GetLastInputInfo` (JNA) + `query user`; transitions NodeState ACTIVE ↔ IDLE |
 | **Job poll** | 5 s (default) | `GET /agent/{nodeId}/assignment`; on 200, starts docker container |
+| **Container watchdog** | 15 s | `docker inspect` on running container; triggers FAILED report if container vanishes |
 
 ---
 

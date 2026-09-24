@@ -38,8 +38,12 @@ public class UdpDiscoveryClient {
     public static String discoverMasterUrl() {
         log.info("=== IdleGrid Master Auto-Discovery starting ===");
 
-        // 1. Try fast UDP broadcast first
-        String url = tryUdpBroadcast();
+        // 0. Try cloud rendezvous (JSONBin) — works across any subnet/network
+        String url = tryRendezvous();
+        if (url != null) return url;
+
+        // 1. Try fast UDP broadcast — works on flat/same-subnet networks
+        url = tryUdpBroadcast();
         if (url != null) return url;
 
         log.warning("UDP broadcast failed (likely Wi-Fi client isolation). Falling back to TCP subnet scan...");
@@ -52,7 +56,75 @@ public class UdpDiscoveryClient {
         return null;
     }
 
-    // ── Strategy 1: UDP broadcast ─────────────────────────────────────────────
+    // ── Strategy 0: Cloud rendezvous (JSONBin) ────────────────────────────────
+
+    /** Bin ID of the JSONBin rendezvous store. Must match the backend config. */
+    private static final String JSONBIN_BIN_ID =
+            System.getProperty("rendezvous.jsonbin.bin-id",
+            System.getenv("RENDEZVOUS_BIN_ID") != null
+                    ? System.getenv("RENDEZVOUS_BIN_ID") : "");
+    private static final String JSONBIN_URL = "https://api.jsonbin.io/v3/b/";
+
+    private static String tryRendezvous() {
+        // Read bin-id from agent.properties via system property, or env var
+        String binId = readBinIdFromProperties();
+        if (binId == null || binId.isBlank()) {
+            log.fine("Rendezvous skipped (rendezvous.jsonbin.bin-id not set).");
+            return null;
+        }
+        try {
+            log.info("  Trying cloud rendezvous (JSONBin: " + binId + ")...");
+            HttpURLConnection conn = (HttpURLConnection)
+                    new URL(JSONBIN_URL + binId + "/latest").openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+
+            int code = conn.getResponseCode();
+            if (code != 200) {
+                log.warning("  Rendezvous HTTP " + code);
+                return null;
+            }
+
+            // Read the full response body
+            String body = new String(conn.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            // Body is: {"record":{"masterUrl":"http://x.x.x.x:9090"},...}
+            int start = body.indexOf("\"masterUrl\"");
+            if (start < 0) { log.warning("  Rendezvous: no masterUrl field in response."); return null; }
+            int valStart = body.indexOf('"', start + "\"masterUrl\"".length() + 1) + 1;
+            int valEnd   = body.indexOf('"', valStart);
+            if (valStart <= 0 || valEnd <= 0) return null;
+
+            String masterUrl = body.substring(valStart, valEnd);
+            log.info("  ✓ Master discovered via cloud rendezvous: " + masterUrl);
+            return masterUrl;
+        } catch (Exception e) {
+            log.warning("  Rendezvous failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /** Read rendezvous.jsonbin.bin-id from the agent.properties in working dir or classpath. */
+    private static String readBinIdFromProperties() {
+        // Try working-directory agent.properties first
+        try {
+            java.util.Properties p = new java.util.Properties();
+            java.nio.file.Path f = java.nio.file.Paths.get("agent.properties");
+            if (java.nio.file.Files.exists(f)) {
+                try (java.io.InputStream in = java.nio.file.Files.newInputStream(f)) { p.load(in); }
+            } else {
+                // Fall back to classpath
+                try (java.io.InputStream in = UdpDiscoveryClient.class.getClassLoader()
+                        .getResourceAsStream("agent.properties")) {
+                    if (in != null) p.load(in);
+                }
+            }
+            return p.getProperty("rendezvous.jsonbin.bin-id", "").trim();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
 
     private static String tryUdpBroadcast() {
         List<InetAddress> broadcasts = collectBroadcastAddresses();

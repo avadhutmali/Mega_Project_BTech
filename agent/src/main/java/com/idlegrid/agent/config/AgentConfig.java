@@ -10,6 +10,8 @@ import java.util.Properties;
 import java.util.UUID;
 import java.util.logging.Logger;
 
+import com.idlegrid.agent.discovery.UdpDiscoveryClient;
+
 /**
  * Loads agent configuration from agent.properties.
  *
@@ -34,11 +36,13 @@ public class AgentConfig {
     private final Properties props;
     private final String nodeId;
     private final String localIp;
+    private final String masterUrl;
 
     public AgentConfig() {
         this.props   = loadProperties();
         this.nodeId  = resolveNodeId();
         this.localIp = resolveIp();
+        this.masterUrl = resolveMasterUrl();
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -116,13 +120,26 @@ public class AgentConfig {
         }
     }
 
+    private String resolveMasterUrl() {
+        String url = props.getProperty("master.url", "auto").trim();
+        if ("auto".equalsIgnoreCase(url)) {
+            String discovered = UdpDiscoveryClient.discoverMasterUrl();
+            if (discovered != null) {
+                return discovered;
+            }
+            LOG.warning("Auto-discovery failed. Defaulting to http://localhost:9090");
+            return "http://localhost:9090";
+        }
+        return url;
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     // Accessors
     // ──────────────────────────────────────────────────────────────────────────
 
     /** Base URL of the Master server, no trailing slash. */
     public String getMasterUrl() {
-        return props.getProperty("master.url", "http://localhost:8080");
+        return masterUrl;
     }
 
     /** Stable identifier for this node, used as the key in all Master API calls. */

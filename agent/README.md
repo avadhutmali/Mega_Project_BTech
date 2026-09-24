@@ -7,29 +7,31 @@ and executing assigned jobs inside a resource-capped Docker container.
 
 ---
 
-## ⬇️ Download pre-built agent (no build needed)
+## ⬇️ Download & Install
 
-> **Just want to run the agent on a lab PC?**
-> Download the ZIP below — it contains the ready-to-run JAR, launcher script, and
-> default config. **No Java build or Maven required** on the target machine — only
-> Java 17+ must be installed.
+### Option A — Windows Installer (recommended) ✨
 
-**[⬇ Download IdleGridAgent-windows.zip](IdleGridAgent-windows.zip)** *(or [Download via GitHub](https://github.com/avadhutmali/Mega_Project_BTech/tree/agent/IdleGridAgent-windows.zip))*
+A single `.exe` with a standard **Next → Next → Install** wizard. No command line needed.
 
-### How to deploy in 3 steps
+**[⬇ Download IdleGridAgent-Setup.exe](https://github.com/avadhutmali/Mega_Project_BTech/raw/main/agent/IdleGridAgent-Setup.exe)**
 
-1. **Download & extract** `IdleGridAgent-windows.zip` anywhere on the lab PC
-   (e.g. `C:\IdleGridAgent\`)
-2. **Edit `agent.properties`** — set the Master's IP:
-   ```properties
-   master.url=http://<master-laptop-ip>:8081
-   ```
-3. **Run** — double-click or open a terminal in the extracted folder:
-   ```bat
-   run.bat
-   ```
+1. Double-click `IdleGridAgent-Setup.exe` (run as Administrator)
+2. Follow the wizard — choose install folder, click Install
+3. On the **Finish** page, tick **"Run Environment Setup"** to auto-install WSL2 + Docker
+4. Edit `agent.properties` → set `master.url=http://<master-ip>:8081`
+5. Launch from the Start Menu → **IdleGrid Agent → Start Agent**
 
-That's it. The agent starts heartbeating to the Master immediately.
+The installer includes:
+- ✅ The agent JAR (all dependencies bundled — no Maven needed)
+- ✅ `setup.ps1` — auto-installs WSL2, Docker Desktop, verifies Java
+- ✅ Start Menu shortcuts (Start Agent, Edit Config, View Logs, Uninstall)
+- ✅ Appears in Windows **Add/Remove Programs** with a proper uninstaller
+
+### Option B — ZIP (manual extract)
+
+**[⬇ Download IdleGridAgent-windows.zip](https://github.com/avadhutmali/Mega_Project_BTech/raw/main/agent/IdleGridAgent-windows.zip)**
+
+Extract anywhere, edit `agent.properties`, run `setup.ps1` as Admin, then `run.bat`.
 
 ---
 

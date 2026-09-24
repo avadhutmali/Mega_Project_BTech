@@ -1,18 +1,25 @@
-# frontend — student web portal
+# IdleGrid dashboard
 
-**Status: not started. Do not build yet.** This folder exists so the repo structure is stable
-when this phase starts — it is not part of the current milestone.
+React + Vite + Tailwind dashboard for the IdleGrid Master service.
 
-## What this will eventually be (Phase 2+)
+## Run locally
 
-A web app talking only to `backend/`'s API — never directly to any Agent. Planned features,
-for context (see `docs/PROJECT_CONTEXT.md` for full detail):
+From this folder:
 
-- Login
-- Live view of node availability (`GET /nodes/summary`)
-- Resource-request form (choose cpu/ram within quota) + "start session"
-- Embedded terminal (xterm.js over WebSocket, proxied to `docker exec` on the assigned node)
-- Storage bucket view (once MinIO is integrated)
+```bash
+npm install
+npm run dev
+```
 
-Nothing here should be implemented until backend + agent's core demo (Docker/WSL2 resource
-capping across real lab PCs) is proven and the guide has signed off on moving forward.
+Open `http://localhost:5173`. Vite proxies `/api` requests to the backend at `http://localhost:8080`.
+
+To use another backend URL, set `VITE_API_BASE_URL` before starting Vite.
+
+## Structure
+
+- `src/api` - backend request boundary
+- `src/appRoutes` - route definitions
+- `src/components` - reusable layout, dashboard, and job UI
+- `src/context` - live data and theme state
+- `src/pages` - route-level screens
+- `src/styles` - Tailwind entrypoint and global styles

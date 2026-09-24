@@ -8,7 +8,9 @@ target/
 node_modules/
 dist/
 build/
-.env
+# .env  ← committed (safe defaults; no secrets)
+.env.local
+.env.*.local
 
 # Python (agent, if chosen)
 __pycache__/

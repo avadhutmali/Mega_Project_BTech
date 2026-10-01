@@ -1,8 +1,9 @@
-import { Activity, Command, LayoutDashboard, TerminalSquare, Workflow } from 'lucide-react'
+import { Activity, CalendarClock, Command, LayoutDashboard, TerminalSquare, Workflow } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const navigation = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/book', label: 'Book resources', icon: CalendarClock },
   { to: '/terminal', label: 'Terminal', icon: Workflow },
   { to: '/jobs', label: 'Jobs', icon: TerminalSquare },
 ]

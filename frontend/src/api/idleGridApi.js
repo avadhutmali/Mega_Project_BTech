@@ -14,7 +14,8 @@ async function request(path, options = {}) {
   })
 
   if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`)
+    const message = await response.text()
+    throw new Error(message || `Request failed with status ${response.status}`)
   }
 
   if (response.status === 204) return null
@@ -24,6 +25,12 @@ async function request(path, options = {}) {
 export const idleGridApi = {
   getNodes: () => request('/nodes/summary'),
   getJobs: () => request('/jobs'),
+  getBookings: () => request('/bookings'),
+  createBooking: (payload) => request('/bookings', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
+  deleteBooking: (bookingId) => request(`/bookings/${bookingId}`, { method: 'DELETE' }),
   getJobStatus: (jobId) => request(`/jobs/${jobId}/status`),
   submitJob: (payload) => request('/jobs/submit', {
     method: 'POST',

@@ -8,6 +8,9 @@ public class Job {
     private JobStatus status = JobStatus.QUEUED;
     private String assignedNode;
     private String result;
+    private Integer sshPort;
+    private String nodeIp;
+
 
     public Job() {
     }
@@ -74,5 +77,21 @@ public class Job {
 
     public void setResult(String result) {
         this.result = result;
+    }
+
+    public Integer getSshPort() {
+        return sshPort;
+    }
+
+    public void setSshPort(Integer sshPort) {
+        this.sshPort = sshPort;
+    }
+
+    public String getNodeIp() {
+        return nodeIp;
+    }
+
+    public void setNodeIp(String nodeIp) {
+        this.nodeIp = nodeIp;
     }
 }

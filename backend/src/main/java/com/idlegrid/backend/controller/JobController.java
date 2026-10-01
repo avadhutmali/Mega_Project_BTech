@@ -1,6 +1,7 @@
 package com.idlegrid.backend.controller;
 
 import com.idlegrid.backend.dto.JobCompleteRequest;
+import com.idlegrid.backend.dto.JobRunningRequest;
 import com.idlegrid.backend.dto.JobSubmitRequest;
 import com.idlegrid.backend.dto.JobSubmitResponse;
 import com.idlegrid.backend.model.Job;
@@ -45,6 +46,25 @@ public class JobController {
         if (job == null) {
             return ResponseEntity.notFound().build();
         }
+        return ResponseEntity.ok(job);
+    }
+
+    /** Agent -> Master, when the job's container has successfully started and port is mapped. */
+    @PostMapping("/{id}/running")
+    public ResponseEntity<Job> running(@PathVariable String id, @RequestBody JobRunningRequest req) {
+        Job job = jobStore.get(id);
+        if (job == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        job.setStatus(JobStatus.RUNNING);
+        job.setSshPort(req.sshPort());
+
+        Node node = nodeStore.get(req.nodeId());
+        if (node != null) {
+            job.setNodeIp(node.getIp());
+        }
+
         return ResponseEntity.ok(job);
     }
 

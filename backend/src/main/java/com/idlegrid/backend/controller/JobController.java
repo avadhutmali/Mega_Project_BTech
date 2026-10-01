@@ -9,6 +9,7 @@ import com.idlegrid.backend.model.JobStatus;
 import com.idlegrid.backend.model.Node;
 import com.idlegrid.backend.store.JobStore;
 import com.idlegrid.backend.store.NodeStore;
+import com.idlegrid.backend.scheduler.SchedulerService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,10 +21,12 @@ public class JobController {
 
     private final JobStore jobStore;
     private final NodeStore nodeStore;
+    private final SchedulerService schedulerService;
 
-    public JobController(JobStore jobStore, NodeStore nodeStore) {
+    public JobController(JobStore jobStore, NodeStore nodeStore, SchedulerService schedulerService) {
         this.jobStore = jobStore;
         this.nodeStore = nodeStore;
+        this.schedulerService = schedulerService;
     }
 
     /** Dashboard polls this every 2 s to render the jobs table. */
@@ -32,11 +35,19 @@ public class JobController {
         return jobStore.all();
     }
 
-    /** Test client / (later) frontend -> Master. Submits a new job, starts it QUEUED. */
+    /** Test client / frontend -> Master. Submits and immediately attempts first-fit assignment. */
     @PostMapping("/submit")
     public JobSubmitResponse submit(@RequestBody JobSubmitRequest req) {
         Job job = jobStore.create(req.cpuReq(), req.ramReqMb(), req.command());
-        return new JobSubmitResponse(job.getId());
+        schedulerService.scheduleNow();
+
+        Node assignedNode = job.getAssignedNode() == null ? null : nodeStore.get(job.getAssignedNode());
+        return new JobSubmitResponse(
+                job.getId(),
+                job.getStatus().name(),
+                job.getAssignedNode(),
+                assignedNode == null ? null : assignedNode.getIp(),
+                assignedNode == null ? null : assignedNode.getSshCommand());
     }
 
     /** Poll this to watch a job move QUEUED -> ASSIGNED -> RUNNING -> DONE/FAILED. */

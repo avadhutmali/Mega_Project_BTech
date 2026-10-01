@@ -42,6 +42,11 @@ public class SchedulerService {
         assignQueuedJobs();
     }
 
+    /** Performs an immediate placement pass for callers that need assignment in their response. */
+    public synchronized void scheduleNow() {
+        assignQueuedJobs();
+    }
+
     private void expireStaleNodes() {
         Instant now = Instant.now();
 

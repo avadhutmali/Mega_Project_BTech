@@ -173,7 +173,7 @@ public class AgentConfig {
 
     /** Docker image used when the job payload doesn't specify one. */
     public String getDefaultDockerImage() {
-        return props.getProperty("docker.default.image", "alpine:latest");
+        return props.getProperty("docker.default.image", "ghcr.io/avadhutmali/idlegrid-ubuntu-worker:latest");
     }
 
     /** Root directory for per-job workspace directories. */

@@ -267,6 +267,13 @@ public class JobExecutor {
             runningContainerId.set(containerId);
             LOG.info("Container started: " + containerId + " for job " + job.getJobId());
 
+            // 3b. Discover the mapped SSH port and report to Master
+            int sshPort = discoverMappedPort(containerId, 22);
+            if (sshPort > 0) {
+                LOG.info("Job " + job.getJobId() + " is accessible via SSH on port " + sshPort);
+                reportRunning(job.getJobId(), sshPort);
+            }
+
             // 4. Stream logs to per-job file + capture output for result reporting
             //    Store logsProc so evict() can destroy it if needed.
             Process logsProc = new ProcessBuilder("docker", "logs", "-f", containerId)
@@ -390,7 +397,8 @@ public class JobExecutor {
         // We do an explicit `docker rm -f` in the finally block instead.
         cmd.add("--cpus=" + cpuStr);
         cmd.add("--memory=" + memStr);
-        cmd.add("--network=none");
+        // Removed --network=none so we can publish ports and SSH into it!
+        cmd.add("-P"); // Publish all exposed ports to random host ports
         cmd.add("--label=idlegrid.session=" + job.getJobId());
         cmd.add("-v"); cmd.add(wsPath + ":/workspace");
         cmd.add("-w"); cmd.add("/workspace");
@@ -449,6 +457,42 @@ public class JobExecutor {
             int code = response != null ? response.statusCode() : -1;
             LOG.warning("Failed to report job " + jobId
                         + " completion — Master returned HTTP " + code);
+        }
+    }
+
+    private int discoverMappedPort(String containerId, int internalPort) {
+        try {
+            Process p = new ProcessBuilder("docker", "port", containerId, String.valueOf(internalPort))
+                    .start();
+            p.waitFor(5, TimeUnit.SECONDS);
+            if (p.exitValue() == 0) {
+                try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                    String line = r.readLine(); // e.g. "0.0.0.0:32768"
+                    if (line != null && line.contains(":")) {
+                        return Integer.parseInt(line.substring(line.lastIndexOf(":") + 1).trim());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.warning("Failed to discover mapped port for container " + containerId + ": " + e.getMessage());
+        }
+        return -1;
+    }
+
+    private void reportRunning(String jobId, int sshPort) {
+        String body = String.format("""
+                {
+                  "sshPort": %d,
+                  "nodeId":  "%s"
+                }""", sshPort, config.getNodeId());
+
+        var response = http.post("/jobs/" + jobId + "/running", body);
+        if (response != null &&
+                (response.statusCode() == 200 || response.statusCode() == 204)) {
+            LOG.info("Reported job " + jobId + " RUNNING on port " + sshPort);
+        } else {
+            int code = response != null ? response.statusCode() : -1;
+            LOG.warning("Failed to report job " + jobId + " running — Master returned HTTP " + code);
         }
     }
 }

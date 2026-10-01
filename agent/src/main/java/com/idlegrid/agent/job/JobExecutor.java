@@ -409,7 +409,14 @@ public class JobExecutor {
         cmd.add("-v"); cmd.add(wsPath + ":/workspace");
         cmd.add("-w"); cmd.add("/workspace");
         cmd.add(image);
-        cmd.add("sh"); cmd.add("-c"); cmd.add(job.getCommand());
+        cmd.add("sh"); cmd.add("-c");
+        // The SSH-enabled worker image normally starts sshd through its Docker CMD.
+        // Supplying a job command replaces that CMD, so start sshd explicitly first.
+        String command = job.getCommand();
+        if (image.equals(config.getDefaultDockerImage())) {
+            command = "/usr/sbin/sshd && " + command;
+        }
+        cmd.add(command);
 
         return cmd;
     }

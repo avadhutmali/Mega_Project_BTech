@@ -150,7 +150,17 @@ public class AgentConfig {
 
     /** SSH command displayed to users for connecting to this lab PC. */
     public String getSshCommand() {
-        return props.getProperty("ssh.command", "").trim();
+        String configured = props.getProperty("ssh.command", "").trim();
+        if (!configured.isEmpty()) {
+            return configured;
+        }
+
+        String username = props.getProperty("ssh.username", "").trim();
+        if (username.isEmpty()) {
+            username = System.getProperty("user.name", "student").trim();
+        }
+        String port = props.getProperty("ssh.port", "22").trim();
+        return String.format("ssh %s@%s -p %s", username, localIp, port);
     }
 
     /** Seconds between heartbeat POSTs. */

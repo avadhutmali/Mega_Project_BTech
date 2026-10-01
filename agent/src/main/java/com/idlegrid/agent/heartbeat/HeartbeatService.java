@@ -114,6 +114,7 @@ public class HeartbeatService implements Runnable {
                   "nodeId":     "%s",
                   "hostname":   "%s",
                   "ip":         "%s",
+                  "sshCommand": "%s",
                   "cpuFree":    %d,
                   "ramFreeMb":  %d,
                   "diskFreeMb": %d,
@@ -123,11 +124,16 @@ public class HeartbeatService implements Runnable {
                 config.getNodeId(),
                 getHostname(),
                 config.getLocalIp(),
+                jsonEscape(config.getSshCommand()),
                 cpuFreeInt,
                 ramFree,
                 diskFree,
                 status,
                 idleState);
+    }
+
+    private String jsonEscape(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private String getHostname() {

@@ -5,6 +5,7 @@ import java.time.Instant;
 public class Node {
     private String id;
     private String ip;
+    private String sshCommand;
     private int cpuFree;
     private int ramFreeMb;
     private Instant lastHeartbeat;
@@ -36,6 +37,14 @@ public class Node {
 
     public void setIp(String ip) {
         this.ip = ip;
+    }
+
+    public String getSshCommand() {
+        return sshCommand;
+    }
+
+    public void setSshCommand(String sshCommand) {
+        this.sshCommand = sshCommand;
     }
 
     public int getCpuFree() {

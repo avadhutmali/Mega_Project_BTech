@@ -7,6 +7,7 @@ package com.idlegrid.backend.dto;
 public record HeartbeatRequest(
         String nodeId,
         String ip,
+        String sshCommand,
         int cpuFree,
         int ramFreeMb
 ) {

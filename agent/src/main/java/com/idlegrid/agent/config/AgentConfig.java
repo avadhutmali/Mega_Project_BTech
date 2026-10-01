@@ -148,6 +148,11 @@ public class AgentConfig {
     /** Best-effort local IPv4 address. */
     public String getLocalIp() { return localIp; }
 
+    /** SSH command displayed to users for connecting to this lab PC. */
+    public String getSshCommand() {
+        return props.getProperty("ssh.command", "").trim();
+    }
+
     /** Seconds between heartbeat POSTs. */
     public int getHeartbeatIntervalSeconds() {
         return intProp("heartbeat.interval.seconds", 3);

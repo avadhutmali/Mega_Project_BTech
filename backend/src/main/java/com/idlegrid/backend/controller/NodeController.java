@@ -20,7 +20,7 @@ public class NodeController {
     /** Agent -> Master, every few seconds. Reports this node's current free capacity. */
     @PostMapping("/heartbeat")
     public Node heartbeat(@RequestBody HeartbeatRequest req) {
-        return nodeStore.upsert(req.nodeId(), req.ip(), req.cpuFree(), req.ramFreeMb());
+        return nodeStore.upsert(req.nodeId(), req.ip(), req.sshCommand(), req.cpuFree(), req.ramFreeMb());
     }
 
     /** Manual/demo visibility — shows every known node and its current status. */

@@ -236,9 +236,18 @@ public class JobExecutor {
             Files.createDirectories(sessionLogDir);
             sessionLogFile = sessionLogDir.resolve(job.getJobId() + ".log");
 
-            // 3. Start container in detached mode
+            // 3. Pull the Docker image first (so user sees progress and it doesn't timeout)
+            String image = (job.getImage() != null && !job.getImage().isBlank()) 
+                           ? job.getImage() : config.getDefaultDockerImage();
+            LOG.info("Ensuring Docker image is downloaded: " + image);
+            Process pullProc = new ProcessBuilder("docker", "pull", image)
+                    .inheritIO() // This prints download progress directly to the agent console!
+                    .start();
+            pullProc.waitFor(); // Wait indefinitely for download to finish
+
+            // 4. Start container in detached mode
             //    docker run -d prints the container ID to stdout (one line)
-            List<String> startCmd = buildDockerCommand(job, workspace);
+            List<String> startCmd = buildDockerCommand(job, workspace, image);
             LOG.info("Executing: " + String.join(" ", startCmd));
 
             Process startProc = new ProcessBuilder(startCmd)
@@ -376,10 +385,7 @@ public class JobExecutor {
      * <p>The command is always wrapped in {@code sh -c "..."} so shell features
      * (pipes, redirects, semicolons) work as expected.
      */
-    private List<String> buildDockerCommand(JobModel job, Path workspace) {
-        String image  = (job.getImage() != null && !job.getImage().isBlank())
-                        ? job.getImage()
-                        : config.getDefaultDockerImage();
+    private List<String> buildDockerCommand(JobModel job, Path workspace, String image) {
         String cpuStr = String.format("%.2f", Math.max(0.10, job.getCpuReq()));
         String memStr = job.getRamReqMb() > 0 ? job.getRamReqMb() + "m" : "512m";
 

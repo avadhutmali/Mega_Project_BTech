@@ -17,7 +17,9 @@ REM ============================================================
 setlocal
 
 set MVN=.\mvnw.cmd
-set JPACKAGE="C:\Program Files\Microsoft\jdk-17.0.13.11-hotspot\bin\jpackage.exe"
+set JPACKAGE=jpackage
+where jpackage >nul 2>nul
+if %errorlevel% neq 0 set JPACKAGE="C:\Program Files\Microsoft\jdk-17.0.13.11-hotspot\bin\jpackage.exe"
 set JAR=agent-1.0-SNAPSHOT-exec.jar
 set DIST=dist
 

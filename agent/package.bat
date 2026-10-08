@@ -59,9 +59,9 @@ echo.
 echo [4/4] Creating distributable ZIP...
 powershell -NoProfile -Command "Compress-Archive -Path 'dist\IdleGridAgent' -DestinationPath 'dist\IdleGridAgent-windows.zip' -Force"
 if errorlevel 1 (
-    echo [WARN] Could not create ZIP (PowerShell Compress-Archive failed).
+    echo [WARN] Could not create ZIP PowerShell Compress-Archive failed.
 ) else (
-    echo       OK — %DIST%\IdleGridAgent-windows.zip
+    echo       OK - %DIST%\IdleGridAgent-windows.zip
 )
 
 echo.

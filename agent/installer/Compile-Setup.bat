@@ -35,7 +35,7 @@ echo FinishMessage= >> setup.sed
 echo TargetName=%~dp0IdleGrid-Setup.exe >> setup.sed
 echo FriendlyName=IdleGrid Agent Setup >> setup.sed
 echo AppLaunched=cmd.exe /c Install-Wrapper.bat >> setup.sed
-echo PostInstallCmd=<None> >> setup.sed
+echo PostInstallCmd=^<None^> >> setup.sed
 echo AdminQuietInstCmd= >> setup.sed
 echo UserQuietInstCmd= >> setup.sed
 echo FILE0="Install-Wrapper.bat" >> setup.sed
@@ -62,4 +62,3 @@ if exist IdleGrid-Setup.exe (
 
 del /q setup.sed
 del /q setup.ps1
-pause

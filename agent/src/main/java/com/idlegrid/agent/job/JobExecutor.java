@@ -410,13 +410,9 @@ public class JobExecutor {
         cmd.add("-w"); cmd.add("/workspace");
         cmd.add(image);
         cmd.add("sh"); cmd.add("-c");
-        // The SSH-enabled worker image normally starts sshd through its Docker CMD.
-        // Supplying a job command replaces that CMD, so start sshd explicitly first.
-        String command = job.getCommand();
-        if (image.equals(config.getDefaultDockerImage())) {
-            command = "/usr/sbin/sshd && " + command;
-        }
-        cmd.add(command);
+        // The Master now fully controls the command (e.g. it sends "/usr/sbin/sshd && sleep X" for booking)
+        cmd.add(job.getCommand());
+
 
         return cmd;
     }

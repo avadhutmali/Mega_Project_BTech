@@ -32,7 +32,7 @@ public class EvictionManager implements NodeState.StateListener {
 
     private final JobExecutor executor;
 
-    public EvictionManager(JobExecutor iexecutor) {
+    public EvictionManager(JobExecutor executor) {
         this.executor = executor;
     }
 

@@ -18,9 +18,10 @@ function shortId(id = '') {
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function BookingPage() {
-  const { nodes, refresh } = useApp()
+  const { nodes, jobs, refresh } = useApp()
   const [selectedNode, setSelectedNode] = useState(null)
 
+  const activeJobs = jobs.filter(j => j.status === 'RUNNING' || j.status === 'ASSIGNED')
   const onlineNodes = nodes.filter((n) => n.status === 'ONLINE')
 
   return (
@@ -45,13 +46,17 @@ export default function BookingPage() {
             Waiting for lab PCs to connect…
           </div>
         )}
-        {nodes.map((node) => (
-          <NodeCard
-            key={node.id}
-            node={node}
-            onBook={() => setSelectedNode(node)}
-          />
-        ))}
+        {nodes.map((node) => {
+          const isBooked = activeJobs.some((j) => j.assignedNode === node.id || j.nodeIp === node.ip)
+          return (
+            <NodeCard
+              key={node.id}
+              node={node}
+              isBooked={isBooked}
+              onBook={() => setSelectedNode(node)}
+            />
+          )
+        })}
       </div>
 
       {/* Booking modal */}
@@ -66,20 +71,23 @@ export default function BookingPage() {
 }
 
 // ─── Node Card ──────────────────────────────────────────────────────────────
-function NodeCard({ node, onBook }) {
+function NodeCard({ node, isBooked, onBook }) {
   const online = node.status === 'ONLINE'
   const ramTotalEst = 16384
   const cpuUsedPct  = Math.max(0, Math.min(100, 100 - (node.cpuFree ?? 0)))
   const ramUsedPct  = Math.max(0, Math.min(100, Math.round((ramTotalEst - (node.ramFreeMb ?? 0)) / ramTotalEst * 100)))
 
+  const stateLabel = !online ? 'Offline' : isBooked ? 'Currently Booked' : 'Book this PC'
+  const isDisabled = !online || isBooked
+
   return (
     <div className={`relative overflow-hidden rounded-2xl border p-5 transition
       ${online
-        ? 'border-emerald-500/25 bg-white hover:-translate-y-1 hover:shadow-lg dark:bg-[#1a2210]'
+        ? isBooked ? 'border-amber-500/25 bg-amber-500/5 dark:bg-[#2a1d16]' : 'border-emerald-500/25 bg-white hover:-translate-y-1 hover:shadow-lg dark:bg-[#1a2210]'
         : 'border-black/[0.08] bg-black/[0.02] opacity-60 dark:border-white/[0.08] dark:bg-[#1a1a1a]'}`}>
 
       {/* top accent bar */}
-      <div className={`absolute left-0 right-0 top-0 h-[3px] rounded-t-2xl ${online ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' : 'bg-black/10 dark:bg-white/10'}`} />
+      <div className={`absolute left-0 right-0 top-0 h-[3px] rounded-t-2xl ${online ? (isBooked ? 'bg-gradient-to-r from-amber-400 to-amber-600' : 'bg-gradient-to-r from-emerald-400 to-emerald-600') : 'bg-black/10 dark:bg-white/10'}`} />
 
       <div className="flex items-start justify-between">
         <div>
@@ -101,11 +109,17 @@ function NodeCard({ node, onBook }) {
       </div>
 
       <button
-        disabled={!online}
+        disabled={isDisabled}
         onClick={onBook}
-        className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/40 py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-600 transition hover:bg-emerald-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-35 dark:text-emerald-400 dark:hover:text-white"
+        className={`mt-5 flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.08em] transition
+        ${isDisabled 
+           ? (isBooked 
+               ? 'border-amber-500/40 text-amber-600 opacity-80 cursor-not-allowed dark:text-amber-400' 
+               : 'border-black/10 text-black/35 opacity-35 cursor-not-allowed dark:border-white/10 dark:text-white/35')
+           : 'border-emerald-500/40 text-emerald-600 hover:bg-emerald-500 hover:text-white dark:text-emerald-400 dark:hover:text-white'
+        }`}
       >
-        <Radio size={13} /> {online ? 'Book this PC' : 'Offline'}
+        <Radio size={13} /> {stateLabel}
       </button>
     </div>
   )

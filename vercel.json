@@ -1,0 +1,6 @@
+{
+  "framework": "vite",
+  "installCommand": "npm --prefix public-landing-page install",
+  "buildCommand": "npm --prefix public-landing-page run build",
+  "outputDirectory": "public-landing-page/dist"
+}

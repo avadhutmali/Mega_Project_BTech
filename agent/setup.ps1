@@ -1,5 +1,5 @@
 # =============================================================================
-# IdleGrid Agent — One-Time Setup Script for Lab PCs
+# IdleGrid Agent - One-Time Setup Script for Lab PCs
 # =============================================================================
 # Run this script ONCE on each lab PC (as Administrator) before deploying the
 # agent. It will:
@@ -14,7 +14,7 @@
 #   .\setup.ps1
 #
 # A REBOOT is required after WSL2 features are enabled (Step 1).
-# Re-run the script after rebooting — it is fully idempotent.
+# Re-run the script after rebooting - it is fully idempotent.
 # =============================================================================
 
 $ErrorActionPreference = "Stop"
@@ -30,12 +30,12 @@ function Write-Info  { param($msg)    Write-Host "    ... $msg" -ForegroundColor
 # ─── Banner ───────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  ╔══════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "  ║   IdleGrid Agent — Lab PC Setup  v1.0        ║" -ForegroundColor Cyan
+Write-Host "  ║   IdleGrid Agent - Lab PC Setup  v1.0        ║" -ForegroundColor Cyan
 Write-Host "  ╚══════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
 # =============================================================================
-# Step 0 — Must be running as Administrator
+# Step 0 - Must be running as Administrator
 # =============================================================================
 Write-Step 0 "Checking Administrator privileges"
 $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
@@ -45,17 +45,17 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 Write-Ok "Running as Administrator"
 
 # =============================================================================
-# Step 1 — Check Windows version (WSL2 needs build 19041+)
+# Step 1 - Check Windows version (WSL2 needs build 19041+)
 # =============================================================================
 Write-Step 1 "Checking Windows version"
 $build = [System.Environment]::OSVersion.Version.Build
 if ($build -lt 19041) {
     Write-Fail "Windows build $build detected. WSL2 requires Windows 10 build 19041 (version 2004) or later."
 }
-Write-Ok "Windows build $build — OK"
+Write-Ok "Windows build $build - OK"
 
 # =============================================================================
-# Step 2 — Enable WSL + Virtual Machine Platform features
+# Step 2 - Enable WSL + Virtual Machine Platform features
 # =============================================================================
 Write-Step 2 "Enabling WSL2 Windows features"
 
@@ -87,7 +87,7 @@ try {
     wsl --set-default-version 2 2>&1 | Out-Null
     Write-Ok "WSL default version set to 2"
 } catch {
-    Write-Warn "Could not set WSL default version — will be set automatically after reboot"
+    Write-Warn "Could not set WSL default version - will be set automatically after reboot"
 }
 
 if ($rebootNeeded) {
@@ -106,7 +106,7 @@ if ($rebootNeeded) {
 }
 
 # =============================================================================
-# Step 3 — Install Docker Desktop (if not already installed)
+# Step 3 - Install Docker Desktop (if not already installed)
 # =============================================================================
 Write-Step 3 "Checking Docker Desktop"
 
@@ -119,9 +119,9 @@ try { $null = Get-Command docker -ErrorAction Stop; $dockerInstalled = $true } c
 if (Test-Path $dockerExe) { $dockerInstalled = $true }
 
 if ($dockerInstalled) {
-    Write-Ok "Docker Desktop is already installed — skipping download"
+    Write-Ok "Docker Desktop is already installed - skipping download"
 } else {
-    Write-Info "Downloading Docker Desktop installer (~600 MB — please wait)..."
+    Write-Info "Downloading Docker Desktop installer (~600 MB - please wait)..."
     $dockerInstallerUrl = "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
     $installerPath = "$Env:TEMP\DockerDesktopInstaller.exe"
 
@@ -147,7 +147,7 @@ if ($dockerInstalled) {
 }
 
 # =============================================================================
-# Step 4 — Start Docker Desktop and wait for it to be ready
+# Step 4 - Start Docker Desktop and wait for it to be ready
 # =============================================================================
 Write-Step 4 "Starting Docker Desktop and waiting for it to be ready"
 
@@ -179,7 +179,7 @@ if (-not $ready) {
 }
 
 # =============================================================================
-# Step 5 — Configure Docker Desktop for IdleGrid
+# Step 5 - Configure Docker Desktop for IdleGrid
 # =============================================================================
 Write-Step 5 "Configuring Docker Desktop for IdleGrid"
 
@@ -203,9 +203,9 @@ $settings = @{}
 if (Test-Path $settingsFile) {
     try {
         $settings = Get-Content $settingsFile -Raw | ConvertFrom-Json -AsHashtable
-        Write-Info "Existing Docker settings found — merging IdleGrid config"
+        Write-Info "Existing Docker settings found - merging IdleGrid config"
     } catch {
-        Write-Warn "Could not parse existing settings — writing fresh config"
+        Write-Warn "Could not parse existing settings - writing fresh config"
         $settings = @{}
     }
 }
@@ -235,11 +235,11 @@ try {
     Start-Sleep -Seconds 8
     Write-Ok "Docker Desktop restarted"
 } catch {
-    Write-Warn "Could not restart Docker Desktop automatically — please restart it manually"
+    Write-Warn "Could not restart Docker Desktop automatically - please restart it manually"
 }
 
 # =============================================================================
-# Step 6 — Check Java 17+
+# Step 6 - Check Java 17+
 # =============================================================================
 Write-Step 6 "Checking Java 17+"
 
@@ -251,7 +251,7 @@ try {
     if ($javaVer -match '"(\d+)') {
         $major = [int]$Matches[1]
         if ($major -ge 17) {
-            Write-Ok "Java $major — OK (17+ required)"
+            Write-Ok "Java $major - OK (17+ required)"
             $javaOk = $true
         } else {
             Write-Warn "Java $major found but IdleGrid requires Java 17 or later"
@@ -271,7 +271,7 @@ if (-not $javaOk) {
 }
 
 # =============================================================================
-# Step 7 — Final verification
+# Step 7 - Final verification
 # =============================================================================
 Write-Step 7 "Final system verification"
 
@@ -281,7 +281,7 @@ $allOk = $true
 try {
     $out = docker info 2>&1
     if ($LASTEXITCODE -eq 0) {
-        Write-Ok "docker info — Docker daemon responding"
+        Write-Ok "docker info - Docker daemon responding"
     } else {
         Write-Warn "docker info returned non-zero. Docker may still be starting."
         $allOk = $false
@@ -293,7 +293,7 @@ try {
 
 # Pull a tiny test image
 try {
-    Write-Info "Pulling alpine:latest (smoke test — ~3 MB)..."
+    Write-Info "Pulling alpine:latest (smoke test - ~3 MB)..."
     docker pull alpine:latest 2>&1 | Out-Null
     $result = docker run --rm alpine:latest echo "IdleGrid OK" 2>&1
     if ($result -match "IdleGrid OK") {
@@ -311,7 +311,7 @@ try {
 if (-not $javaOk) { $allOk = $false }
 
 # =============================================================================
-# Step 8 — Summary
+# Step 8 - Summary
 # =============================================================================
 Write-Host ""
 if ($allOk) {

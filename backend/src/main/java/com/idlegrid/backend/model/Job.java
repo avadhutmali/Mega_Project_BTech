@@ -10,17 +10,21 @@ public class Job {
     private String result;
     private Integer sshPort;
     private String nodeIp;
+    private String targetNodeId;
+    private int durationMinutes;
 
 
     public Job() {
     }
 
-    public Job(String id, int cpuReq, int ramReqMb, String command) {
+    public Job(String id, int cpuReq, int ramReqMb, String command, String targetNodeId, int durationMinutes) {
         this.id = id;
         this.cpuReq = cpuReq;
         this.ramReqMb = ramReqMb;
         this.command = command;
         this.status = JobStatus.QUEUED;
+        this.targetNodeId = targetNodeId;
+        this.durationMinutes = durationMinutes;
     }
 
     public String getId() {
@@ -93,5 +97,21 @@ public class Job {
 
     public void setNodeIp(String nodeIp) {
         this.nodeIp = nodeIp;
+    }
+
+    public String getTargetNodeId() {
+        return targetNodeId;
+    }
+
+    public void setTargetNodeId(String targetNodeId) {
+        this.targetNodeId = targetNodeId;
+    }
+
+    public int getDurationMinutes() {
+        return durationMinutes;
+    }
+
+    public void setDurationMinutes(int durationMinutes) {
+        this.durationMinutes = durationMinutes;
     }
 }

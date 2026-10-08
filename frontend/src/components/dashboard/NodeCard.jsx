@@ -1,4 +1,5 @@
 import { Cpu, HardDrive, Radio } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 function formatNodeId(id = '') {
   return id.length > 12 ? `${id.slice(0, 8)}...${id.slice(-4)}` : id
@@ -19,7 +20,14 @@ export default function NodeCard({ node }) {
         <ResourceBar icon={Cpu} label="CPU free" value={`${node.cpuFree ?? 0} / ${node.cpuTotal ?? 0}`} percent={100 - cpuPercent} />
         <ResourceBar icon={HardDrive} label="RAM free" value={`${node.ramFreeMb ?? 0} MB`} percent={100 - ramPercent} />
       </div>
-      <div className={`mt-5 inline-flex rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.14em] ${online ? 'border-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'border-black/10 text-black/35 dark:border-white/10 dark:text-white/35'}`}>{node.status || 'UNKNOWN'}</div>
+      <div className="mt-5 flex items-center justify-between">
+        <div className={`inline-flex rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.14em] ${online ? 'border-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'border-black/10 text-black/35 dark:border-white/10 dark:text-white/35'}`}>{node.status || 'UNKNOWN'}</div>
+        {online && (
+          <Link to="/book" className="rounded-lg border border-ember/40 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.1em] text-ember transition hover:bg-ember hover:text-white">
+            Book →
+          </Link>
+        )}
+      </div>
     </article>
   )
 }
@@ -27,3 +35,4 @@ export default function NodeCard({ node }) {
 function ResourceBar({ icon: Icon, label, value, percent }) {
   return <div><div className="mb-1.5 flex items-center justify-between text-[11px]"><span className="flex items-center gap-1.5 text-black/45 dark:text-white/45"><Icon size={13} />{label}</span><span className="font-mono text-[10px] text-black/55 dark:text-white/55">{value}</span></div><div className="h-1 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.08]"><div className="h-full rounded-full bg-ember transition-all" style={{ width: `${Math.max(4, percent)}%` }} /></div></div>
 }
+

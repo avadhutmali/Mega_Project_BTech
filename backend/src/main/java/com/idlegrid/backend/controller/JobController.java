@@ -38,7 +38,21 @@ public class JobController {
     /** Test client / frontend -> Master. Submits and immediately attempts first-fit assignment. */
     @PostMapping("/submit")
     public JobSubmitResponse submit(@RequestBody JobSubmitRequest req) {
-        Job job = jobStore.create(req.cpuReq(), req.ramReqMb(), req.command());
+        // When durationMinutes > 0 (booking flow), auto-build the SSH command.
+        // Cap at 24 hours (1440 min) so no one can lock a machine indefinitely.
+        String command;
+        if (req.durationMinutes() > 0) {
+            int cappedMinutes = Math.min(req.durationMinutes(), 1440);
+            long sleepSeconds = (long) cappedMinutes * 60;
+            command = "/usr/sbin/sshd && sleep " + sleepSeconds;
+        } else if (req.command() != null && !req.command().isBlank()) {
+            command = req.command();
+        } else {
+            command = "echo 'No command specified'";
+        }
+
+        Job job = jobStore.create(req.cpuReq(), req.ramReqMb(), command,
+                req.targetNodeId(), req.durationMinutes());
         schedulerService.scheduleNow();
 
         Node assignedNode = job.getAssignedNode() == null ? null : nodeStore.get(job.getAssignedNode());

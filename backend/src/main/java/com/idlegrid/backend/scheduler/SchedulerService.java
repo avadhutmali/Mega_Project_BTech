@@ -75,9 +75,9 @@ public class SchedulerService {
 
     private void assignQueuedJobs() {
         for (Job job : jobStore.byStatus(JobStatus.QUEUED)) {
-            Node target = firstFit(job);
+            Node target = pickNode(job);
             if (target == null) {
-                continue; // no node has room right now - stays QUEUED, tried again next tick
+                continue; // no node available right now — stays QUEUED, tried again next tick
             }
 
             target.setCpuFree(target.getCpuFree() - job.getCpuReq());
@@ -86,6 +86,26 @@ public class SchedulerService {
             job.setAssignedNode(target.getId());
             job.setStatus(JobStatus.ASSIGNED);
         }
+    }
+
+    /**
+     * If the job has a targetNodeId, try to assign it there (and wait if the node
+     * is busy/offline — it stays QUEUED until that specific node has room).
+     * Otherwise fall back to first-fit across all ONLINE nodes.
+     */
+    private Node pickNode(Job job) {
+        String targetId = job.getTargetNodeId();
+        if (targetId != null && !targetId.isBlank()) {
+            Node node = nodeStore.get(targetId);
+            if (node != null
+                    && node.getStatus() == NodeStatus.ONLINE
+                    && node.getCpuFree() >= job.getCpuReq()
+                    && node.getRamFreeMb() >= job.getRamReqMb()) {
+                return node;
+            }
+            return null; // wait for the specific node to become available
+        }
+        return firstFit(job);
     }
 
     private Node firstFit(Job job) {

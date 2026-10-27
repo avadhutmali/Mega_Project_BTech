@@ -45,13 +45,13 @@ function App() {
         <div className="step-grid">
           <article><span className="step-no">01</span><h3>Download & extract</h3><p>Save the ZIP and extract all files into one folder on the lab PC.</p></article>
           <article><span className="step-no">02</span><h3>Set up the PC</h3><p>Install Java 17+ and Docker Desktop. Run <code>setup.ps1</code> as Administrator if WSL2 or Docker needs setup.</p></article>
-          <article><span className="step-no">03</span><h3>Start the agent</h3><p>Open <code>agent.properties</code> if needed, then double-click <code>run-agent.bat</code>.</p></article>
+          <article><span className="step-no">03</span><h3>Connect to the Master</h3><p>In the extracted folder, open <code>agent.properties</code> beside <code>run-agent.bat</code>. Set <code>master.url=http://&lt;master-PC-IP&gt;:9090</code>, save, then double-click <code>run-agent.bat</code>.</p></article>
         </div>
       </section>
 
       <section className="connection-note">
         <span className="note-dot" />
-        <p><strong>Campus network:</strong> The package uses <code>master.url=auto</code> for LAN discovery. If discovery is disabled, set it to <code>http://&lt;master-ip&gt;:9090</code>.</p>
+        <p><strong>Manual Master address:</strong> In the extracted agent folder, edit <code>agent.properties</code> next to <code>run-agent.bat</code>. Replace <code>master.url=auto</code> with <code>master.url=http://&lt;master-PC-IP&gt;:9090</code>, save, then restart the agent. Use <code>auto</code> for discovery.</p>
         <a href={downloadPath} download="IdleGridAgent-windows.zip">Get the ZIP ↗</a>
       </section>
 

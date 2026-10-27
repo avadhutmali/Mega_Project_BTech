@@ -2,8 +2,10 @@ IdleGrid Agent — Portable Windows ZIP
 ====================================
 
 1. Extract every file from this ZIP into one folder.
-2. If needed, edit agent.properties. Use master.url=auto for campus LAN discovery,
-   or set master.url=http://<master-ip>:9090.
+2. If automatic discovery does not work, open agent.properties in this same folder
+   (next to run-agent.bat) in Notepad. Change master.url=auto to
+   master.url=http://<master-PC-IP>:9090, for example
+   master.url=http://192.168.1.25:9090. Save the file and restart run-agent.bat.
    The JSONBin ID is preconfigured. If the rendezvous bin is private, configure a
    read-only RENDEZVOUS_READ_KEY on this PC or in agent.properties.
 3. Install Java 17 or newer if it is not already installed.

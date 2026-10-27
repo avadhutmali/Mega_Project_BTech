@@ -18,8 +18,9 @@ The backend listens on **port 9090**, configured in `application.properties`.
 
 ## Enable JSONBin Master discovery
 
-The Master only publishes its URL when `JSONBIN_API_KEY` is set in the process environment.
-The default bin ID is configured; override it with `JSONBIN_BIN_ID` if using another bin.
+The Master publishes its URL using the Core API key configured in `application.properties`;
+override it with `JSONBIN_API_KEY` in the process environment. The default bin ID is configured;
+override it with `JSONBIN_BIN_ID` if using another bin.
 If the Master has multiple network interfaces, set `JSONBIN_MASTER_URL` to the address
 lab Agents can reach.
 

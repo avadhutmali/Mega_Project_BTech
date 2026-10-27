@@ -12,6 +12,7 @@ public class JobModel {
     private final String jobId;
     private final String command;
     private final String image;
+    private final String networkMode;
     private final double cpuReq;
     private final int    ramReqMb;
 
@@ -22,10 +23,11 @@ public class JobModel {
      * @param cpuReq   CPU allocation in fractional cores (e.g. 1.5)
      * @param ramReqMb RAM allocation in megabytes
      */
-    public JobModel(String jobId, String command, String image, double cpuReq, int ramReqMb) {
+    public JobModel(String jobId, String command, String image, String networkMode, double cpuReq, int ramReqMb) {
         this.jobId    = jobId;
         this.command  = command;
         this.image    = image;
+        this.networkMode = networkMode;
         this.cpuReq   = cpuReq;
         this.ramReqMb = ramReqMb;
     }
@@ -33,6 +35,7 @@ public class JobModel {
     public String getJobId()   { return jobId; }
     public String getCommand() { return command; }
     public String getImage()   { return image; }
+    public String getNetworkMode() { return networkMode; }
     public double getCpuReq()  { return cpuReq; }
     public int    getRamReqMb(){ return ramReqMb; }
 

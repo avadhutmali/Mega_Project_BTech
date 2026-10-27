@@ -127,11 +127,14 @@ public class JobPoller implements Runnable {
             }
 
             String command = obj.optString("command", "echo 'no command specified'");
-            String image   = obj.has("image") ? obj.getString("image") : null;
+            String image   = obj.optString("image", "");
+            if (image.isBlank()) image = null;
+            String networkMode = obj.optString("networkMode", "bridge");
+            if (networkMode.isBlank() || "null".equalsIgnoreCase(networkMode)) networkMode = "bridge";
             double cpuReq  = obj.optDouble("cpuReq", 1.0);
             int    ramReq  = obj.optInt("ramReqMb", 512);
 
-            return new JobModel(jobId, command, image, cpuReq, ramReq);
+            return new JobModel(jobId, command, image, networkMode, cpuReq, ramReq);
 
         } catch (Exception e) {
             LOG.warning("Failed to parse assignment JSON: " + e.getMessage()

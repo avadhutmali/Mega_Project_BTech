@@ -5,6 +5,7 @@ import JobsPage from '../pages/JobsPage'
 import TerminalPage from '../pages/TerminalPage'
 import BookingPage from '../pages/BookingPage'
 import StoragePage from '../pages/StoragePage'
+import DistributedTrainingPage from '../pages/DistributedTrainingPage'
 
 export default function AppRoutes() {
   return (
@@ -15,6 +16,7 @@ export default function AppRoutes() {
         <Route path="/terminal" element={<TerminalPage />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/storage" element={<StoragePage />} />
+        <Route path="/training" element={<DistributedTrainingPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

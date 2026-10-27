@@ -240,10 +240,18 @@ public class JobExecutor {
             String image = (job.getImage() != null && !job.getImage().isBlank()) 
                            ? job.getImage() : config.getDefaultDockerImage();
             LOG.info("Ensuring Docker image is downloaded: " + image);
-            Process pullProc = new ProcessBuilder("docker", "pull", image)
-                    .inheritIO() // This prints download progress directly to the agent console!
-                    .start();
-            pullProc.waitFor(); // Wait indefinitely for download to finish
+            Process inspectProc = new ProcessBuilder("docker", "image", "inspect", image)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD).start();
+            boolean inspectFinished = inspectProc.waitFor(15, TimeUnit.SECONDS);
+            if (!inspectFinished) inspectProc.destroyForcibly().waitFor();
+            boolean imageAvailable = inspectFinished && inspectProc.exitValue() == 0;
+            if (!imageAvailable) {
+                Process pullProc = new ProcessBuilder("docker", "pull", image)
+                        .inheritIO()
+                        .start();
+                if (pullProc.waitFor() != 0) throw new RuntimeException("Could not pull Docker image " + image);
+            }
 
             // 4. Start container in detached mode
             //    docker run -d prints the container ID to stdout (one line)
@@ -404,7 +412,12 @@ public class JobExecutor {
         cmd.add("--cpus=" + cpuStr);
         cmd.add("--memory=" + memStr);
         // Removed --network=none so we can publish ports and SSH into it!
-        cmd.add("-P"); // Publish all exposed ports to random host ports
+        boolean hostNetwork = "host".equalsIgnoreCase(job.getNetworkMode());
+        if (hostNetwork) {
+            cmd.add("--network=host");
+        } else {
+            cmd.add("-P"); // Publish all exposed ports to random host ports
+        }
         cmd.add("--label=idlegrid.session=" + job.getJobId());
         cmd.add("-v"); cmd.add(wsPath + ":/workspace");
         cmd.add("-w"); cmd.add("/workspace");

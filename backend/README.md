@@ -31,6 +31,8 @@ Job
   cpuReq        number (core equivalents; fractional values allowed)
   ramReqMb      int
   command       string             (what the container should run)
+  image         string (optional; training jobs select PyTorch image)
+  networkMode   string (bridge by default; DDP runs use host)
   status        QUEUED | ASSIGNED | RUNNING | DONE | FAILED
   assignedNode  string (nullable)
   result        string (nullable)
@@ -64,6 +66,14 @@ GET  /storage/summary      -> aggregate online node disk capacity and file count
 GET  /agent/{nodeId}/storage/assignment -> agent pulls a replica task (204 if none)
 GET /agent/storage/{key}/content -> agent downloads the source bytes for a replica
 POST /agent/{nodeId}/storage/{key}/complete -> agent confirms replica placement
+
+POST /distributed-training/runs
+  multipart: bundle ZIP, command, workers, cpuReq, ramReqMb, image, outputFile
+  -> atomically reserves 2–3 online workers and launches one DDP rank per node
+GET  /distributed-training/runs/{runId} -> run and per-worker status
+GET  /distributed-training/runs/{runId}/bundle -> worker container downloads the ZIP
+POST /distributed-training/runs/{runId}/artifact -> rank zero uploads final model
+GET  /distributed-training/runs/{runId}/artifact -> download final model
 ```
 
 The Master keeps a canonical file copy and metadata index. Agents hold up to two worker
@@ -87,4 +97,17 @@ needed yet to verify the scheduler logic; you can POST fake heartbeats to simula
 ## Do not build yet
 
 Authentication, database, MinIO, DRF fairness, and job checkpointing remain out of scope.
-The dashboard includes the storage view and upload flow for this prototype.
+The dashboard includes the storage view, upload flow, and separate distributed-training page.
+
+## Distributed image training
+
+The DDP page accepts a ZIP containing a DDP-aware Python entrypoint and image data. The
+Master reserves all selected PCs together and runs `torchrun` with one rank per node. The
+script uses `DistributedSampler` to partition examples and `DistributedDataParallel` to
+synchronize gradients. Rank zero must save the requested `model.pt` artifact. The platform
+does not infer distributed behavior from arbitrary Python commands.
+
+This CPU/Gloo demo requires TCP reachability among Agents and Docker Desktop host networking
+enabled on Windows PCs. Build `idlegrid-pytorch-cpu:latest` from
+`agent/training-worker/Dockerfile` on every Agent. A starter script is in
+`examples/distributed-image-training/train.py`.

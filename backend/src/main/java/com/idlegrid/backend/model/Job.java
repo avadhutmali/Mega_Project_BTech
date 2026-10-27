@@ -5,6 +5,9 @@ public class Job {
     private double cpuReq;
     private int ramReqMb;
     private String command;
+    private String image;
+    private String networkMode;
+    private String distributedTrainingRunId;
     private JobStatus status = JobStatus.QUEUED;
     private String assignedNode;
     private String result;
@@ -58,6 +61,15 @@ public class Job {
     public void setCommand(String command) {
         this.command = command;
     }
+
+    public String getImage() { return image; }
+    public void setImage(String image) { this.image = image; }
+
+    public String getNetworkMode() { return networkMode; }
+    public void setNetworkMode(String networkMode) { this.networkMode = networkMode; }
+
+    public String getDistributedTrainingRunId() { return distributedTrainingRunId; }
+    public void setDistributedTrainingRunId(String runId) { this.distributedTrainingRunId = runId; }
 
     public JobStatus getStatus() {
         return status;

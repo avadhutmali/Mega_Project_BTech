@@ -14,5 +14,10 @@ Docker Desktop with its WSL2 backend must be installed and running before the ag
 can execute compute jobs. Run setup.ps1 from an Administrator PowerShell to prepare
 WSL2 and Docker on a lab PC. A reboot may be required after enabling WSL2.
 
+For distributed PyTorch DDP, build the included CPU worker image on every PC:
+  docker build -t idlegrid-pytorch-cpu:latest -f training-worker/Dockerfile training-worker
+Enable Docker Desktop host networking (Settings > Resources > Network) and allow TCP
+connections between lab PCs. Docker Desktop 4.34+ is required for host networking.
+
 The launcher, JAR, and agent.properties must stay together in the extracted folder.
 Logs are written to the logs subfolder.

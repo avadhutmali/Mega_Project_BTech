@@ -30,6 +30,21 @@ $env:JSONBIN_MASTER_URL = "http://<master-ip>:9090"
 .\mvnw.cmd spring-boot:run
 ```
 
+## Distributed PyTorch image training
+
+The dashboard has a separate **Distributed training** page. On every Agent PC, build the
+CPU/Gloo image from its extracted Agent ZIP:
+
+```powershell
+docker build -t idlegrid-pytorch-cpu:latest -f training-worker/Dockerfile training-worker
+```
+
+Also enable Docker Desktop host networking (4.34+) and allow TCP connections among the
+selected lab PCs. Upload a ZIP containing a DDP-aware Python entrypoint and
+`data/<class-name>/*` images. Use a command such as `train.py --epochs 2 --batch-size 32`.
+The script must use `DistributedSampler` and DDP and save rank zero's checkpoint as
+`model.pt`. A starter script is at `examples/distributed-image-training/train.py`.
+
 ## Test it end to end with curl (no Agent needed yet)
 
 1. Simulate a node heartbeat:

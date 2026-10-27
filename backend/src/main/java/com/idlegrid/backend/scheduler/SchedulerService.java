@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.function.Supplier;
 
 /**
  * The Master's scheduling loop.
@@ -47,6 +48,11 @@ public class SchedulerService {
         assignQueuedJobs();
     }
 
+    /** Run an atomic gang-placement operation against the same lock as normal scheduling. */
+    public synchronized <T> T coordinatePlacement(Supplier<T> placement) {
+        return placement.get();
+    }
+
     private void expireStaleNodes() {
         Instant now = Instant.now();
 
@@ -66,8 +72,13 @@ public class SchedulerService {
                 boolean wasOnThisNode = node.getId().equals(job.getAssignedNode());
                 boolean inFlight = job.getStatus() == JobStatus.ASSIGNED || job.getStatus() == JobStatus.RUNNING;
                 if (wasOnThisNode && inFlight) {
-                    job.setStatus(JobStatus.QUEUED);
-                    job.setAssignedNode(null);
+                    if (job.getDistributedTrainingRunId() != null) {
+                        job.setStatus(JobStatus.FAILED);
+                        job.setResult("Distributed training worker went offline; the DDP group cannot continue.");
+                    } else {
+                        job.setStatus(JobStatus.QUEUED);
+                        job.setAssignedNode(null);
+                    }
                 }
             }
         }
@@ -96,6 +107,7 @@ public class SchedulerService {
             Node node = nodeStore.get(targetId);
             if (node != null
                     && node.getStatus() == NodeStatus.ONLINE
+                    && !hasDistributedTrainingOn(node.getId())
                     && availableCpu(node) >= job.getCpuReq()
                     && availableRam(node) >= job.getRamReqMb()) {
                 return node;
@@ -108,6 +120,9 @@ public class SchedulerService {
     private Node firstFit(Job job) {
         for (Node node : nodeStore.all()) {
             if (node.getStatus() != NodeStatus.ONLINE) {
+                continue;
+            }
+            if (hasDistributedTrainingOn(node.getId())) {
                 continue;
             }
             if (availableCpu(node) >= job.getCpuReq() && availableRam(node) >= job.getRamReqMb()) {
@@ -134,5 +149,11 @@ public class SchedulerService {
                 .filter(job -> job.getStatus() == JobStatus.ASSIGNED || job.getStatus() == JobStatus.RUNNING)
                 .mapToLong(Job::getRamReqMb).sum();
         return Math.max(0, node.getRamFreeMb() - reserved);
+    }
+
+    private boolean hasDistributedTrainingOn(String nodeId) {
+        return jobStore.all().stream().anyMatch(job -> nodeId.equals(job.getAssignedNode())
+                && job.getDistributedTrainingRunId() != null
+                && (job.getStatus() == JobStatus.ASSIGNED || job.getStatus() == JobStatus.RUNNING));
     }
 }

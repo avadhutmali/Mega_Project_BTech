@@ -25,6 +25,7 @@ copy /y "agent.properties" "%STAGE%\agent.properties" >nul
 copy /y "run-agent.bat" "%STAGE%\run-agent.bat" >nul
 copy /y "setup.ps1" "%STAGE%\setup.ps1" >nul
 copy /y "QUICKSTART.txt" "%STAGE%\QUICKSTART.txt" >nul
+xcopy "training-worker" "%STAGE%\training-worker\" /E /I /Y >nul
 if not exist "%STAGE%\%JAR_NAME%" (
     echo [ERROR] Could not copy the agent JAR.
     exit /b 1

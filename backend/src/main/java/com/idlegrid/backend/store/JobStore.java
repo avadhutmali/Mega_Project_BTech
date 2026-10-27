@@ -24,6 +24,20 @@ public class JobStore {
         return job;
     }
 
+    public Job createAssigned(double cpuReq, int ramReqMb, String command, String nodeId,
+                              String image, String networkMode) {
+        String id = UUID.randomUUID().toString();
+        Job job = new Job(id, cpuReq, ramReqMb, command, nodeId, 0);
+        job.setImage(image);
+        job.setNetworkMode(networkMode);
+        job.setAssignedNode(nodeId);
+        job.setStatus(JobStatus.ASSIGNED);
+        jobs.put(id, job);
+        return job;
+    }
+
+    public void remove(String id) { jobs.remove(id); }
+
     public Job get(String id) {
         return jobs.get(id);
     }

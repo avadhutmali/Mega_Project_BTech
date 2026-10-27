@@ -46,4 +46,19 @@ export const idleGridApi = {
     return response.json()
   },
   fileUrl: (key) => `${API_BASE}/storage/files/${encodeURIComponent(key)}/content`,
+  createTrainingRun: async ({ bundle, command, workers, cpuReq, ramReqMb, image, outputFile }) => {
+    const body = new FormData()
+    body.append('bundle', bundle)
+    body.append('command', command)
+    body.append('workers', String(workers))
+    body.append('cpuReq', String(cpuReq))
+    body.append('ramReqMb', String(ramReqMb))
+    body.append('image', image)
+    body.append('outputFile', outputFile)
+    const response = await fetch(`${API_BASE}/distributed-training/runs`, { method: 'POST', body })
+    if (!response.ok) throw new Error((await response.text()) || `Could not start run (${response.status})`)
+    return response.json()
+  },
+  getTrainingRun: (runId) => request(`/distributed-training/runs/${encodeURIComponent(runId)}`),
+  trainingArtifactUrl: (runId) => `${API_BASE}/distributed-training/runs/${encodeURIComponent(runId)}/artifact`,
 }

@@ -198,6 +198,8 @@ zombie containers consuming CPU/RAM without the Master knowing.
 | POST | `/nodes/heartbeat` | Agent → Master | Register / refresh CPU, RAM, and storage capacity every 3 s |
 | GET | `/agent/{nodeId}/assignment` | Agent → Master | Poll for assigned job |
 | POST | `/jobs/{id}/complete` | Agent → Master | Report success or failure |
+| GET | `/distributed-training/runs/{runId}/bundle` | Agent container → Master | Download the shared DDP bundle |
+| POST | `/distributed-training/runs/{runId}/artifact` | Rank zero container → Master | Upload the final checkpoint |
 | GET | `/agent/{nodeId}/storage/assignment` | Agent → Master | Pull a file-replica task |
 | GET | `/agent/storage/{key}/content` | Agent → Master | Download bytes for a replica |
 | POST | `/agent/{nodeId}/storage/{key}/complete` | Agent → Master | Acknowledge replica placement |
@@ -208,6 +210,21 @@ also reports `POST /jobs/{id}/running` with the mapped SSH port and node ID.
 For shared files, the agent polls `GET /agent/{nodeId}/storage/assignment`, downloads
 the selected file from the Master, stores it under its configured storage directory,
 and acknowledges the replica at `POST /agent/{nodeId}/storage/{key}/complete`.
+
+### Distributed PyTorch training
+
+The DDP path starts one rank per Agent using Docker host networking. On each Windows PC,
+enable Docker Desktop 4.34+ host networking under Settings > Resources > Network and allow
+TCP traffic between selected PCs. Build the included CPU/Gloo image from the extracted ZIP:
+
+```powershell
+docker build -t idlegrid-pytorch-cpu:latest -f training-worker/Dockerfile training-worker
+```
+
+The uploaded ZIP contains the DDP-aware Python entrypoint and image data. The entrypoint
+must initialize `torch.distributed`, wrap its model in DDP, use `DistributedSampler`, and
+have rank zero save `model.pt` in the bundle directory. See
+`examples/distributed-image-training/train.py` for a starter pattern.
 
 ---
 
@@ -240,5 +257,5 @@ agent/
 
 ## Do not build yet
 
-Checkpointing/persistence, terminal/SSH access into containers, multi-node job splitting,
-MinIO storage, frontend integration. See `AGENTS.md` at repo root.
+Checkpointing/persistence, MinIO storage, and decentralized scheduling remain out of scope.
+See `AGENTS.md` at repo root.

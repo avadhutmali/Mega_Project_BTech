@@ -7,7 +7,7 @@ const initial = {
   workers: 3,
   cpuReq: 1,
   ramReqMb: 2048,
-  image: 'idlegrid-pytorch-cpu:latest',
+  image: 'ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest',
   outputFile: 'model.pt',
 }
 
@@ -105,7 +105,7 @@ export default function DistributedTrainingPage() {
           <h2 className="font-display text-xl">PC prerequisites</h2>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-xs leading-5 text-black/60 dark:text-white/60">
             <li>All selected PCs must be online and idle enough for the requested CPU/RAM.</li>
-            <li>Build the included <code>idlegrid-pytorch-cpu:latest</code> image on each PC.</li>
+            <li>Pull <code>ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest</code> on each PC (or build it locally if GHCR is unavailable).</li>
             <li>Enable Docker Desktop host networking and allow TCP between the PCs.</li>
             <li>Start with CPU/Gloo; this project does not pass GPUs into containers yet.</li>
           </ul>

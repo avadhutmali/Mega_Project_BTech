@@ -22,6 +22,7 @@ the dashboard:
 train.py --epochs 2 --batch-size 32
 ```
 
-This is CPU/Gloo training. Each Agent PC needs the `idlegrid-pytorch-cpu:latest` image
-built from `agent/training-worker/Dockerfile`, Docker Desktop host networking enabled, and
+This is CPU/Gloo training. Each Agent PC needs the
+`ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest` image (or the local fallback built from
+`agent/training-worker/Dockerfile`), Docker Desktop host networking enabled, and
 TCP connectivity to the other selected PCs on the lab network.

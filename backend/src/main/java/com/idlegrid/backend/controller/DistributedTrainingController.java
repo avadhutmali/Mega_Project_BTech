@@ -45,7 +45,7 @@ public class DistributedTrainingController {
             @RequestParam(defaultValue = "3") int workers,
             @RequestParam(defaultValue = "1") double cpuReq,
             @RequestParam(defaultValue = "2048") int ramReqMb,
-            @RequestParam(defaultValue = "idlegrid-pytorch-cpu:latest") String image,
+            @RequestParam(defaultValue = "ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest") String image,
             @RequestParam(defaultValue = "model.pt") String outputFile,
             HttpServletRequest request) {
         String scheme = request.getScheme();

@@ -32,12 +32,15 @@ $env:JSONBIN_MASTER_URL = "http://<master-ip>:9090"
 
 ## Distributed PyTorch image training
 
-The dashboard has a separate **Distributed training** page. On every Agent PC, build the
-CPU/Gloo image from its extracted Agent ZIP:
+The dashboard has a separate **Distributed training** page. On every Agent PC, pull the
+CPU/Gloo image:
 
 ```powershell
-docker build -t idlegrid-pytorch-cpu:latest -f training-worker/Dockerfile training-worker
+docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest
 ```
+
+If the package is not public yet, build locally with
+`docker build -t idlegrid-pytorch-cpu:latest -f training-worker/Dockerfile training-worker`.
 
 Also enable Docker Desktop host networking (4.34+) and allow TCP connections among the
 selected lab PCs. Upload a ZIP containing a DDP-aware Python entrypoint and

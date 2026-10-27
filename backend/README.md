@@ -108,6 +108,7 @@ synchronize gradients. Rank zero must save the requested `model.pt` artifact. Th
 does not infer distributed behavior from arbitrary Python commands.
 
 This CPU/Gloo demo requires TCP reachability among Agents and Docker Desktop host networking
-enabled on Windows PCs. Build `idlegrid-pytorch-cpu:latest` from
-`agent/training-worker/Dockerfile` on every Agent. A starter script is in
+enabled on Windows PCs. Pull `ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest` on every
+Agent. If GHCR is not public yet, build `idlegrid-pytorch-cpu:latest` from
+`agent/training-worker/Dockerfile`. A starter script is in
 `examples/distributed-image-training/train.py`.

@@ -76,7 +76,8 @@ public class DistributedTrainingService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Could not read training ZIP: " + e.getMessage());
         }
 
-        String finalImage = image == null || image.isBlank() ? "idlegrid-pytorch-cpu:latest" : image.trim();
+        String finalImage = image == null || image.isBlank()
+                ? "ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest" : image.trim();
         String finalOutput = outputFile == null || outputFile.isBlank() ? "model.pt" : outputFile.trim();
         return scheduler.coordinatePlacement(() -> {
             List<Node> selected = selectNodes(workerCount, cpuReq, ramReqMb);

@@ -218,8 +218,11 @@ enable Docker Desktop 4.34+ host networking under Settings > Resources > Network
 TCP traffic between selected PCs. Build the included CPU/Gloo image from the extracted ZIP:
 
 ```powershell
-docker build -t idlegrid-pytorch-cpu:latest -f training-worker/Dockerfile training-worker
+docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest
 ```
+
+If the package is not public yet, build locally with
+`docker build -t idlegrid-pytorch-cpu:latest -f training-worker/Dockerfile training-worker`.
 
 The uploaded ZIP contains the DDP-aware Python entrypoint and image data. The entrypoint
 must initialize `torch.distributed`, wrap its model in DDP, use `DistributedSampler`, and

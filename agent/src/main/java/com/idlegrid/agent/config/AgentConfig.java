@@ -127,8 +127,8 @@ public class AgentConfig {
             if (discovered != null) {
                 return discovered;
             }
-            LOG.warning("Auto-discovery failed. Defaulting to http://localhost:9090");
-            return "http://localhost:9090";
+            throw new IllegalStateException("Could not discover the IdleGrid Master. "
+                    + "Set master.url in agent.properties, or check JSONBin and LAN discovery settings.");
         }
         return url;
     }

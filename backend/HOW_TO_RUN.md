@@ -16,6 +16,21 @@ Starts on **`http://localhost:9090`**
 
 The backend listens on **port 9090**, configured in `application.properties`.
 
+## Enable JSONBin Master discovery
+
+The Master only publishes its URL when `JSONBIN_API_KEY` is set in the process environment.
+The default bin ID is configured; override it with `JSONBIN_BIN_ID` if using another bin.
+If the Master has multiple network interfaces, set `JSONBIN_MASTER_URL` to the address
+lab Agents can reach.
+
+Example in PowerShell (replace placeholders locally; do not commit keys):
+
+```powershell
+$env:JSONBIN_API_KEY = "YOUR_CURRENT_JSONBIN_API_KEY"
+$env:JSONBIN_MASTER_URL = "http://<master-ip>:9090"
+.\mvnw.cmd spring-boot:run
+```
+
 ## Test it end to end with curl (no Agent needed yet)
 
 1. Simulate a node heartbeat:

@@ -89,6 +89,14 @@ idle.threshold.seconds=300
 Any property in the working-directory `agent.properties` overrides the JAR defaults.
 A node ID (UUID) is auto-generated on first run and saved to `.node_id`.
 
+The package includes the shared JSONBin ID. The Master publishes its URL using
+`JSONBIN_API_KEY`; set `JSONBIN_MASTER_URL` on the Master if automatic IP selection
+chooses the wrong network interface. The bin must be readable by Agents: make it public,
+or configure a **read-only** `RENDEZVOUS_READ_KEY` on the Agent PCs. Do not distribute the
+Master API key in the Agent ZIP. If JSONBin cannot be reached, LAN discovery still runs;
+if every discovery method fails, the agent exits with a config error instead of contacting
+the wrong machine at `localhost`.
+
 ### Run
 
 ```bat

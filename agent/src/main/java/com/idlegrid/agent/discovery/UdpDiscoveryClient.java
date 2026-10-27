@@ -17,6 +17,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
+import java.util.Properties;
+import org.json.JSONObject;
 
 /**
  * Discovers the IdleGrid Master server automatically — no manual IP config needed.
@@ -58,15 +60,9 @@ public class UdpDiscoveryClient {
 
     // ── Strategy 0: Cloud rendezvous (JSONBin) ────────────────────────────────
 
-    /** Bin ID of the JSONBin rendezvous store. Must match the backend config. */
-    private static final String JSONBIN_BIN_ID =
-            System.getProperty("rendezvous.jsonbin.bin-id",
-            System.getenv("RENDEZVOUS_BIN_ID") != null
-                    ? System.getenv("RENDEZVOUS_BIN_ID") : "");
     private static final String JSONBIN_URL = "https://api.jsonbin.io/v3/b/";
 
     private static String tryRendezvous() {
-        // Read bin-id from agent.properties via system property, or env var
         String binId = readBinIdFromProperties();
         if (binId == null || binId.isBlank()) {
             log.fine("Rendezvous skipped (rendezvous.jsonbin.bin-id not set).");
@@ -79,23 +75,28 @@ public class UdpDiscoveryClient {
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(5000);
             conn.setReadTimeout(5000);
+            String readKey = readProperty("rendezvous.jsonbin.read-key", "RENDEZVOUS_READ_KEY");
+            if (!readKey.isBlank()) {
+                conn.setRequestProperty("X-Access-Key", readKey);
+            }
 
             int code = conn.getResponseCode();
             if (code != 200) {
-                log.warning("  Rendezvous HTTP " + code);
+                if (code == 403 || code == 401) {
+                    log.warning("  Rendezvous read denied. Make the bin public or configure a read-only RENDEZVOUS_READ_KEY.");
+                } else {
+                    log.warning("  Rendezvous HTTP " + code);
+                }
                 return null;
             }
 
-            // Read the full response body
             String body = new String(conn.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            // Body is: {"record":{"masterUrl":"http://x.x.x.x:9090"},...}
-            int start = body.indexOf("\"masterUrl\"");
-            if (start < 0) { log.warning("  Rendezvous: no masterUrl field in response."); return null; }
-            int valStart = body.indexOf('"', start + "\"masterUrl\"".length() + 1) + 1;
-            int valEnd   = body.indexOf('"', valStart);
-            if (valStart <= 0 || valEnd <= 0) return null;
-
-            String masterUrl = body.substring(valStart, valEnd);
+            JSONObject record = new JSONObject(body).optJSONObject("record");
+            String masterUrl = record == null ? "" : record.optString("masterUrl", "").trim();
+            if (!(masterUrl.startsWith("http://") || masterUrl.startsWith("https://"))) {
+                log.warning("  Rendezvous response did not contain a valid masterUrl.");
+                return null;
+            }
             log.info("  ✓ Master discovered via cloud rendezvous: " + masterUrl);
             return masterUrl;
         } catch (Exception e) {
@@ -106,9 +107,16 @@ public class UdpDiscoveryClient {
 
     /** Read rendezvous.jsonbin.bin-id from the agent.properties in working dir or classpath. */
     private static String readBinIdFromProperties() {
-        // Try working-directory agent.properties first
+        return readProperty("rendezvous.jsonbin.bin-id", "RENDEZVOUS_BIN_ID");
+    }
+
+    private static String readProperty(String propertyName, String envName) {
+        String value = System.getProperty(propertyName, "").trim();
+        if (!value.isBlank()) return value;
+        value = System.getenv(envName);
+        if (value != null && !value.isBlank()) return value.trim();
         try {
-            java.util.Properties p = new java.util.Properties();
+            Properties p = new Properties();
             java.nio.file.Path f = java.nio.file.Paths.get("agent.properties");
             if (java.nio.file.Files.exists(f)) {
                 try (java.io.InputStream in = java.nio.file.Files.newInputStream(f)) { p.load(in); }
@@ -119,7 +127,7 @@ public class UdpDiscoveryClient {
                     if (in != null) p.load(in);
                 }
             }
-            return p.getProperty("rendezvous.jsonbin.bin-id", "").trim();
+            return p.getProperty(propertyName, "").trim();
         } catch (Exception e) {
             return "";
         }

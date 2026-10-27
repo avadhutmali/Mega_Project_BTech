@@ -2,7 +2,7 @@ package com.idlegrid.backend.model;
 
 public class Job {
     private String id;
-    private int cpuReq;
+    private double cpuReq;
     private int ramReqMb;
     private String command;
     private JobStatus status = JobStatus.QUEUED;
@@ -17,7 +17,7 @@ public class Job {
     public Job() {
     }
 
-    public Job(String id, int cpuReq, int ramReqMb, String command, String targetNodeId, int durationMinutes) {
+    public Job(String id, double cpuReq, int ramReqMb, String command, String targetNodeId, int durationMinutes) {
         this.id = id;
         this.cpuReq = cpuReq;
         this.ramReqMb = ramReqMb;
@@ -35,11 +35,11 @@ public class Job {
         this.id = id;
     }
 
-    public int getCpuReq() {
+    public double getCpuReq() {
         return cpuReq;
     }
 
-    public void setCpuReq(int cpuReq) {
+    public void setCpuReq(double cpuReq) {
         this.cpuReq = cpuReq;
     }
 

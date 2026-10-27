@@ -8,7 +8,12 @@ public record HeartbeatRequest(
         String nodeId,
         String ip,
         String sshCommand,
-        int cpuFree,
-        int ramFreeMb
+        double cpuTotal,
+        double cpuFree,
+        long ramTotalMb,
+        long ramFreeMb,
+        long diskTotalMb,
+        long diskFreeMb,
+        String status
 ) {
 }

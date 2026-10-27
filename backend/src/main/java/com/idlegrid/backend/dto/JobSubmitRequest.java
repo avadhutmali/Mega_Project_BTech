@@ -7,7 +7,7 @@ package com.idlegrid.backend.dto;
  *                  When > 0, the backend auto-builds the command: /usr/sbin/sshd && sleep Xs
  */
 public record JobSubmitRequest(
-        int cpuReq,
+        double cpuReq,
         int ramReqMb,
         String command,
         String targetNodeId,

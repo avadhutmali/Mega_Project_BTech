@@ -1,0 +1,15 @@
+IdleGrid Agent — Portable Windows ZIP
+====================================
+
+1. Extract every file from this ZIP into one folder.
+2. If needed, edit agent.properties. Use master.url=auto for campus LAN discovery,
+   or set master.url=http://<master-ip>:9090.
+3. Install Java 17 or newer if it is not already installed.
+4. Double-click run-agent.bat and leave its window open while the agent is running.
+
+Docker Desktop with its WSL2 backend must be installed and running before the agent
+can execute compute jobs. Run setup.ps1 from an Administrator PowerShell to prepare
+WSL2 and Docker on a lab PC. A reboot may be required after enabling WSL2.
+
+The launcher, JAR, and agent.properties must stay together in the extracted folder.
+Logs are written to the logs subfolder.

@@ -196,6 +196,9 @@ public class AgentConfig {
         return props.getProperty("workspace.dir", "./workspace");
     }
 
+    /** Directory for persistent storage replicas assigned to this node. */
+    public String getStorageDir() { return props.getProperty("storage.dir", "./storage"); }
+
     /** Root directory for all log files. */
     public String getLogDir() {
         return props.getProperty("log.dir", "./logs");

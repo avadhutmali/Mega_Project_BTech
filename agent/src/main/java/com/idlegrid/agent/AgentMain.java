@@ -1,7 +1,6 @@
 package com.idlegrid.agent;
 
 import com.idlegrid.agent.config.AgentConfig;
-import com.idlegrid.agent.eviction.EvictionManager;
 import com.idlegrid.agent.heartbeat.HeartbeatService;
 import com.idlegrid.agent.idle.IdleDetector;
 import com.idlegrid.agent.idle.NodeState;
@@ -9,6 +8,7 @@ import com.idlegrid.agent.job.ContainerWatchdog;
 import com.idlegrid.agent.job.JobExecutor;
 import com.idlegrid.agent.job.JobPoller;
 import com.idlegrid.agent.resources.ResourceMonitor;
+import com.idlegrid.agent.storage.StorageReplicaPoller;
 import com.idlegrid.agent.util.HttpUtil;
 
 import java.io.IOException;
@@ -32,9 +32,9 @@ import java.util.logging.SimpleFormatter;
  *   <li>Configure logging (console INFO + rolling file ALL)</li>
  *   <li>Clean up orphaned Docker containers from any previous crash (Step 10)</li>
  *   <li>Wire all services together (no framework, plain dependency injection)</li>
- *   <li>Register the eviction manager as a NodeState listener</li>
+ *   <li>Track user activity for telemetry without interrupting capped jobs</li>
  *   <li>Schedule all four loops on a shared ScheduledExecutorService
- *       (heartbeat, idle-check, job-poll, container-watchdog)</li>
+ *       (heartbeat, idle-check, job-poll, container-watchdog, storage-replica-poll)</li>
  *   <li>Park the main thread; loops run on daemon threads</li>
  * </ol>
  *
@@ -50,7 +50,7 @@ import java.util.logging.SimpleFormatter;
  *
  * Override config by placing {@code agent.properties} in the working directory:
  * <pre>
- *   master.url=http://192.168.1.100:8080
+ *   master.url=http://192.168.1.100:9090
  *   idle.threshold.seconds=120
  * </pre>
  */
@@ -78,21 +78,17 @@ public class AgentMain {
         executor.cleanupOrphanedContainers();
 
         // ── 4. Wire Services ──────────────────────────────────────────────────
-        ResourceMonitor  monitor   = new ResourceMonitor();
+        ResourceMonitor  monitor   = new ResourceMonitor(config.getStorageDir());
         NodeState        nodeState = new NodeState();
         IdleDetector     idleDet   = new IdleDetector(config, nodeState);
         HeartbeatService heartbeat = new HeartbeatService(config, monitor, nodeState, http);
         JobPoller          poller    = new JobPoller(config, http, executor);
-        EvictionManager    eviction  = new EvictionManager(executor);
         ContainerWatchdog  watchdog  = new ContainerWatchdog(executor, http);
-
-        // Register eviction BEFORE starting the idle loop so no IDLE→ACTIVE
-        // transitions are missed between wiring and scheduling.
-        eviction.register(nodeState);
+        StorageReplicaPoller storagePoller = new StorageReplicaPoller(config, http);
 
         // ── 5. Schedule Loops ─────────────────────────────────────────────
-        // 5 threads: heartbeat, idle-check, job-poll, container-watchdog, + 1 spare
-        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(5,
+        // Separate workers keep blocking HTTP/Docker activity from delaying other loops.
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(6,
                 runnable -> {
                     Thread t = new Thread(runnable, "agent-scheduler");
                     t.setDaemon(true); // don't block JVM shutdown
@@ -103,6 +99,7 @@ public class AgentMain {
         idleDet.scheduleOn(scheduler, config.getIdleCheckIntervalSeconds());
         poller.scheduleOn(scheduler);
         watchdog.scheduleOn(scheduler);
+        storagePoller.scheduleOn(scheduler);
 
         // ── 6. Summary Log ────────────────────────────────────────────────────
         log.info("All loops started successfully:");
@@ -114,6 +111,7 @@ public class AgentMain {
                  + "s  (threshold=" + config.getIdleThresholdSeconds() + "s)");
         log.info("  Job poll   : every " + config.getJobPollIntervalSeconds() + "s");
         log.info("  Watchdog   : every " + ContainerWatchdog.INTERVAL_SECONDS + "s");
+        log.info("  Storage    : polls for replica tasks every 5s");
         log.info("  Log dir    : " + Paths.get(config.getLogDir()).toAbsolutePath());
         log.info("Press Ctrl+C to stop.");
 
@@ -121,9 +119,11 @@ public class AgentMain {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("Shutdown signal received — notifying Master of OFFLINE status...");
             // Best-effort; if Master is down this will timeout and we move on
+            double cpuTotal = Runtime.getRuntime().availableProcessors();
             http.post("/nodes/heartbeat", String.format(
-                    "{\"nodeId\":\"%s\",\"ip\":\"%s\",\"status\":\"OFFLINE\"}",
-                    config.getNodeId(), config.getLocalIp()));
+                    "{\"nodeId\":\"%s\",\"ip\":\"%s\",\"sshCommand\":\"%s\","
+                    + "\"cpuTotal\":%.2f,\"cpuFree\":0,\"ramTotalMb\":0,\"ramFreeMb\":0,\"status\":\"OFFLINE\"}",
+                    config.getNodeId(), config.getLocalIp(), config.getSshCommand().replace("\\", "\\\\").replace("\"", "\\\""), cpuTotal));
             idleDet.close(); // flush + close idle_transitions.log file handle
             scheduler.shutdownNow();
             log.info("Agent stopped.");

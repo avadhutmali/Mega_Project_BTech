@@ -9,29 +9,17 @@ and executing assigned jobs inside a resource-capped Docker container.
 
 ## ⬇️ Download & Install
 
-### Option A — Windows Installer (recommended) ✨
+### Portable ZIP (recommended)
 
-A single `.exe` with a standard **Next → Next → Install** wizard. No command line needed.
+**[⬇ Download IdleGridAgent-windows.zip](IdleGridAgent-windows.zip)**
 
-**[⬇ Download IdleGridAgent-Setup.exe](https://github.com/avadhutmali/Mega_Project_BTech/raw/main/agent/IdleGridAgent-Setup.exe)**
+1. Extract the ZIP into a folder.
+2. Edit `agent.properties` if the Master cannot be discovered automatically.
+3. Double-click `run-agent.bat` and keep its window open.
 
-1. Double-click `IdleGridAgent-Setup.exe` (run as Administrator)
-2. Follow the wizard — choose install folder, click Install
-3. On the **Finish** page, tick **"Run Environment Setup"** to auto-install WSL2 + Docker
-4. Edit `agent.properties` → set `master.url=http://<master-ip>:8081`
-5. Launch from the Start Menu → **IdleGrid Agent → Start Agent**
-
-The installer includes:
-- ✅ The agent JAR (all dependencies bundled — no Maven needed)
-- ✅ `setup.ps1` — auto-installs WSL2, Docker Desktop, verifies Java
-- ✅ Start Menu shortcuts (Start Agent, Edit Config, View Logs, Uninstall)
-- ✅ Appears in Windows **Add/Remove Programs** with a proper uninstaller
-
-### Option B — ZIP (manual extract)
-
-**[⬇ Download IdleGridAgent-windows.zip](https://github.com/avadhutmali/Mega_Project_BTech/raw/main/agent/IdleGridAgent-windows.zip)**
-
-Extract anywhere, edit `agent.properties`, run `setup.ps1` as Admin, then `run.bat`.
+The ZIP contains the standalone fat JAR, launcher, configuration, quick-start guide,
+and `setup.ps1`. Install Java 17+ and Docker Desktop first; `setup.ps1` can help prepare
+WSL2 and Docker on a lab PC.
 
 ---
 
@@ -79,15 +67,14 @@ This produces `target/agent-1.0-SNAPSHOT-exec.jar` — a fat JAR with all depend
 
 ### Package (Create Standalone ZIP)
 
-To build a standalone Windows executable (`IdleGridAgent.exe`) with a bundled JRE into a distributable ZIP package:
+To rebuild the portable Windows ZIP (fat JAR + `run-agent.bat` + config):
 
 ```bat
 cd agent
 .\package.bat
 ```
 
-This creates the distribution ZIP in `dist/`:
-⬇️ **[Download dist/IdleGridAgent-windows.zip](dist/IdleGridAgent-windows.zip)**
+This creates `agent/IdleGridAgent-windows.zip`, ready to copy or share.
 
 
 ### Configure (optional)
@@ -95,7 +82,7 @@ This creates the distribution ZIP in `dist/`:
 Copy `src/main/resources/agent.properties` to the `agent/` directory and edit:
 
 ```properties
-master.url=http://<master-ip>:8081
+master.url=http://<master-ip>:9090
 idle.threshold.seconds=300
 ```
 
@@ -105,13 +92,13 @@ A node ID (UUID) is auto-generated on first run and saved to `.node_id`.
 ### Run
 
 ```bat
-run.bat
+run-agent.bat
 ```
 
 or directly:
 
 ```bat
-java -jar target\agent-1.0-SNAPSHOT-exec.jar
+java -jar agent-1.0-SNAPSHOT-exec.jar
 ```
 
 Logs go to `logs/agent.log` (rolling, 10 MB × 3 files) and the console.
@@ -125,10 +112,11 @@ call blocks briefly.
 
 | Loop | Interval | What it does |
 |------|----------|--------------|
-| **Heartbeat** | 3 s (default) | `POST /nodes/heartbeat` with nodeId, ip, cpuFree%, ramFreeMb, diskFreeMb, idleState |
+| **Heartbeat** | 3 s (default) | `POST /nodes/heartbeat` with nodeId, ip, cpuTotal, cpuFree (core equivalents), RAM totals/free, and idleState |
 | **Idle check** | 10 s (default) | Calls `GetLastInputInfo` (JNA) + `query user`; transitions NodeState ACTIVE ↔ IDLE |
 | **Job poll** | 5 s (default) | `GET /agent/{nodeId}/assignment`; on 200, starts docker container |
 | **Container watchdog** | 15 s | `docker inspect` on running container; triggers FAILED report if container vanishes |
+| **Storage poll** | 5 s | Pulls assigned file replicas into the node's `storage/` directory |
 
 ---
 
@@ -141,9 +129,8 @@ Two complementary Windows signals are combined:
 2. **`query user`** (shell) — whether any Windows session is in "Active" state.
    Catches the "watching a video without moving the mouse" case.
 
-**Transition asymmetry (by design):**
-- `ACTIVE → IDLE`: only after idle threshold elapses (default 300 s). *Slow departure.*
-- `IDLE → ACTIVE`: instantly on any input. *Fast return — container must die before user notices.*
+The detector records both transitions. Activity state is currently telemetry only; it
+does not pause or terminate jobs, which continue under their container resource limits.
 
 All transitions are logged to `logs/idle_transitions.log` for empirical threshold analysis
 (the thesis "results" section — run this for a day on a real lab PC and study the data).
@@ -155,34 +142,33 @@ All transitions are logged to `logs/idle_transitions.log` for empirical threshol
 On assignment, the agent runs:
 
 ```
-docker run -d --rm
+docker run -d
   --cpus=<cpuReq>
   --memory=<ramReqMb>m
-  --network=none
   --label=idlegrid.session=<jobId>
+  -P
   -v <workspace>:/workspace
   -w /workspace
   <image>
   sh -c "<command>"
 ```
 
-- `-d` (detached) → Docker prints the container ID immediately so we can kill it on eviction.
-- `--network=none` → containers cannot make outbound connections (security).
+- `-d` (detached) → Docker prints the container ID immediately so the watchdog can manage it.
+- `-P` → publishes image-exposed ports on random host ports for the optional SSH workflow.
 - `--label=idlegrid.session=<jobId>` → enables orphan cleanup on agent restart.
 
 Output is streamed to `logs/sessions/<jobId>.log` and reported to the Master on completion.
 
 ---
 
-## Eviction (IDLE → ACTIVE while a job is running)
+## Co-tenancy
 
-1. `EvictionManager` receives the IDLE → ACTIVE state transition.
-2. Calls `docker kill <containerId>` — kills the container immediately (~100 ms).
-3. Reports `POST /jobs/{id}/complete` with `{ success: false, result: "evicted" }`.
-4. Master requeues the job.
+Idle detection records ACTIVE/IDLE transitions for observation. It does not evict a
+running container when keyboard or mouse activity resumes: containers continue under
+their Docker CPU and memory caps so the PC owner can keep using the machine.
 
-**Demo metric:** time between mouse movement and container death — measure this for the
-evaluation section.
+**Demo metric:** compare owner-perceived responsiveness while a capped job runs with
+normal use and while no job runs.
 
 ---
 
@@ -203,12 +189,19 @@ zombie containers consuming CPU/RAM without the Master knowing.
 
 | Method | Path | Direction | Purpose |
 |--------|------|-----------|---------|
-| POST | `/nodes/heartbeat` | Agent → Master | Register / refresh node every 3 s |
+| POST | `/nodes/heartbeat` | Agent → Master | Register / refresh CPU, RAM, and storage capacity every 3 s |
 | GET | `/agent/{nodeId}/assignment` | Agent → Master | Poll for assigned job |
-| POST | `/jobs/{id}/complete` | Agent → Master | Report success, failure, or eviction |
+| POST | `/jobs/{id}/complete` | Agent → Master | Report success or failure |
+| GET | `/agent/{nodeId}/storage/assignment` | Agent → Master | Pull a file-replica task |
+| GET | `/agent/storage/{key}/content` | Agent → Master | Download bytes for a replica |
+| POST | `/agent/{nodeId}/storage/{key}/complete` | Agent → Master | Acknowledge replica placement |
 
-> **Backend note:** `GET /agent/{nodeId}/assignment` needs to be added to the backend.
-> The agent handles 404 gracefully until it exists. Coordinate with Avadhut.
+The backend implements the assignment endpoint. After a container starts, the agent
+also reports `POST /jobs/{id}/running` with the mapped SSH port and node ID.
+
+For shared files, the agent polls `GET /agent/{nodeId}/storage/assignment`, downloads
+the selected file from the Master, stores it under its configured storage directory,
+and acknowledges the replica at `POST /agent/{nodeId}/storage/{key}/complete`.
 
 ---
 
@@ -234,9 +227,7 @@ agent/
     ├── job/
     │   ├── JobModel.java            # Assignment POJO
     │   ├── JobPoller.java           # Polls Master for assignments
-    │   └── JobExecutor.java         # docker run -d, logs, evict, orphan cleanup
-    └── eviction/
-        └── EvictionManager.java     # NodeState listener → triggers JobExecutor.evict()
+    │   └── JobExecutor.java         # docker run -d, logs, watchdog handling, orphan cleanup
 ```
 
 ---

@@ -15,10 +15,12 @@ The brain of the cluster. Built with **Java & Spring Boot**.
 * **Node Management:** Tracks which lab PCs are currently online via heartbeats and monitors their available CPU/RAM capacity.
 * **Job Scheduling:** Receives job requests (with specific CPU/RAM requirements) and assigns them to the most suitable available node using a first-fit algorithm.
 * **State Tracking:** Maintains an in-memory ledger of all queued, running, and completed jobs.
+* **Shared Files:** Stores uploads with a random access key and places up to two worker replicas when online disk capacity allows.
 
 ### 2. The Agent (`/agent`)
 The worker process that runs silently on each lab PC. Built with **Java** and packaged as a native Windows executable (`.exe`).
 * **Heartbeats:** Continuously pings the Master backend to announce its presence and available hardware resources.
+* **Storage Replicas:** Reports disk capacity and pulls assigned file copies into its local storage directory.
 * **Job Execution:** When assigned a job, it pulls the requested Docker image and executes the job command.
 * **Resource Isolation:** Job containers are strictly constrained by the lab PC's WSL2 configuration, ensuring the local user is never disrupted.
 * **Auto-Installer (`agent/installer`):** Includes a zero-dependency, native Windows setup executable (`IdleGrid-Setup.exe`) that automatically enables WSL2 and installs Docker Desktop in the background.
@@ -28,6 +30,7 @@ The control panel for submitting jobs. Built with **React, Vite, and TailwindCSS
 * **Live Node Map:** See a real-time list of all connected lab PCs, their IP addresses, and their current resource availability.
 * **Job Submission:** A clean form to submit arbitrary commands or scripts, specifying exactly how much CPU and RAM the job requires.
 * **Job Tracking:** Watch jobs move from `QUEUED` to `ASSIGNED` to `RUNNING` or `FAILED`, and grab SSH connection strings to connect directly to running jobs.
+* **File Storage:** Upload files, see worker disk capacity, copy an access key, and retrieve that file later.
 
 ### 4. Public Portal (`/public-landing-page`)
 The public-facing showcase website. Built with **React & Vite**.

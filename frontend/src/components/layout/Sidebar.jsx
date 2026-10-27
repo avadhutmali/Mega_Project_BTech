@@ -1,4 +1,4 @@
-import { Activity, CalendarClock, Command, LayoutDashboard, TerminalSquare, Workflow } from 'lucide-react'
+import { Activity, CalendarClock, Command, HardDrive, LayoutDashboard, TerminalSquare, Workflow } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const navigation = [
@@ -6,6 +6,7 @@ const navigation = [
   { to: '/book', label: 'Book resources', icon: CalendarClock },
   { to: '/terminal', label: 'Terminal', icon: Workflow },
   { to: '/jobs', label: 'Jobs', icon: TerminalSquare },
+  { to: '/storage', label: 'Storage', icon: HardDrive },
 ]
 
 export default function Sidebar() {

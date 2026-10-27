@@ -37,7 +37,7 @@ public class SchedulerService {
     }
 
     @Scheduled(fixedRate = 3000)
-    public void tick() {
+    public synchronized void tick() {
         expireStaleNodes();
         assignQueuedJobs();
     }
@@ -80,9 +80,6 @@ public class SchedulerService {
                 continue; // no node available right now — stays QUEUED, tried again next tick
             }
 
-            target.setCpuFree(target.getCpuFree() - job.getCpuReq());
-            target.setRamFreeMb(target.getRamFreeMb() - job.getRamReqMb());
-
             job.setAssignedNode(target.getId());
             job.setStatus(JobStatus.ASSIGNED);
         }
@@ -99,8 +96,8 @@ public class SchedulerService {
             Node node = nodeStore.get(targetId);
             if (node != null
                     && node.getStatus() == NodeStatus.ONLINE
-                    && node.getCpuFree() >= job.getCpuReq()
-                    && node.getRamFreeMb() >= job.getRamReqMb()) {
+                    && availableCpu(node) >= job.getCpuReq()
+                    && availableRam(node) >= job.getRamReqMb()) {
                 return node;
             }
             return null; // wait for the specific node to become available
@@ -113,10 +110,29 @@ public class SchedulerService {
             if (node.getStatus() != NodeStatus.ONLINE) {
                 continue;
             }
-            if (node.getCpuFree() >= job.getCpuReq() && node.getRamFreeMb() >= job.getRamReqMb()) {
+            if (availableCpu(node) >= job.getCpuReq() && availableRam(node) >= job.getRamReqMb()) {
                 return node;
             }
         }
         return null;
+    }
+
+    // Heartbeats report live host capacity. Keep that measurement intact and
+    // subtract scheduler reservations when placing work, so a later heartbeat
+    // cannot accidentally make already-assigned jobs disappear from accounting.
+    private double availableCpu(Node node) {
+        double reserved = jobStore.all().stream()
+                .filter(job -> node.getId().equals(job.getAssignedNode()))
+                .filter(job -> job.getStatus() == JobStatus.ASSIGNED || job.getStatus() == JobStatus.RUNNING)
+                .mapToDouble(Job::getCpuReq).sum();
+        return Math.max(0, node.getCpuFree() - reserved);
+    }
+
+    private long availableRam(Node node) {
+        long reserved = jobStore.all().stream()
+                .filter(job -> node.getId().equals(job.getAssignedNode()))
+                .filter(job -> job.getStatus() == JobStatus.ASSIGNED || job.getStatus() == JobStatus.RUNNING)
+                .mapToLong(Job::getRamReqMb).sum();
+        return Math.max(0, node.getRamFreeMb() - reserved);
     }
 }

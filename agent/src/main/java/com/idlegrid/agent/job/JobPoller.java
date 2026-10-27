@@ -28,9 +28,7 @@ import java.util.logging.Logger;
  * here too for robustness.
  *
  * <h3>Coordination note</h3>
- * The {@code GET /agent/{nodeId}/assignment} endpoint needs to be added to the
- * backend (see AGENTS.md open question).  The poller handles 404 gracefully so
- * the agent can start up and heartbeat before that endpoint exists.
+ * The backend provides this endpoint; an empty queue is represented by HTTP 204.
  */
 public class JobPoller implements Runnable {
 

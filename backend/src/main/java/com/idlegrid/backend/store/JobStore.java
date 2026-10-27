@@ -17,7 +17,7 @@ public class JobStore {
 
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
 
-    public Job create(int cpuReq, int ramReqMb, String command, String targetNodeId, int durationMinutes) {
+    public Job create(double cpuReq, int ramReqMb, String command, String targetNodeId, int durationMinutes) {
         String id = UUID.randomUUID().toString();
         Job job = new Job(id, cpuReq, ramReqMb, command, targetNodeId, durationMinutes);
         jobs.put(id, job);

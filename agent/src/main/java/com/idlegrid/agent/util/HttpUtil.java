@@ -83,6 +83,23 @@ public class HttpUtil {
         }
     }
 
+    /** HTTP GET binary content without decoding file bytes as text. */
+    public HttpResponse<byte[]> getBytes(String path) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(masterUrl + path))
+                    .GET()
+                    .timeout(Duration.ofSeconds(60))
+                    .build();
+            HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            LOG.fine("GET " + path + " → HTTP " + response.statusCode());
+            return response;
+        } catch (Exception e) {
+            LOG.warning("GET " + path + " failed: " + e.getMessage());
+            return null;
+        }
+    }
+
     /** Returns the configured master base URL (for logging). */
     public String getMasterUrl() { return masterUrl; }
 }

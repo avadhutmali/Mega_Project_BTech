@@ -1,83 +1,69 @@
 @echo off
-REM ============================================================
-REM  IdleGrid Agent — Native EXE packager (Windows)
-REM
-REM  Uses jpackage (bundled with JDK 14+) to produce a
-REM  self-contained app image:  dist\IdleGridAgent\IdleGridAgent.exe
-REM  The EXE bundles its own JRE — no Java installation needed
-REM  on any target lab PC.
-REM
-REM  Usage:
-REM    package.bat
-REM
-REM  Output:
-REM    dist\IdleGridAgent\IdleGridAgent.exe   ← run this on lab PCs
-REM    dist\IdleGridAgent-windows.zip         ← distribute this zip
-REM ============================================================
 setlocal
+cd /d "%~dp0"
 
-set MVN=.\mvnw.cmd
-set JPACKAGE=jpackage
-where jpackage >nul 2>nul
-if %errorlevel% neq 0 set JPACKAGE="C:\Program Files\Microsoft\jdk-17.0.13.11-hotspot\bin\jpackage.exe"
-set JAR=agent-1.0-SNAPSHOT-exec.jar
-set DIST=dist
+set "JAR_NAME=agent-1.0-SNAPSHOT-exec.jar"
+set "STAGE=dist\IdleGridAgent"
+set "ZIP=IdleGridAgent-windows.zip"
 
-echo.
-echo [1/4] Building fat JAR...
-call %MVN% package -q
+echo [1/4] Building the standalone agent JAR...
+call .\mvnw.cmd -q -DskipTests package
 if errorlevel 1 (
-    echo [ERROR] Maven build failed.
+    echo [ERROR] Agent build failed.
     exit /b 1
 )
-echo       OK — target\%JAR%
-
-echo.
-echo [2/4] Cleaning previous dist...
-if exist "%DIST%" rmdir /s /q "%DIST%"
-mkdir "%DIST%"
-
-echo.
-echo [3/4] Packaging with jpackage (bundling JRE — this takes ~30s)...
-%JPACKAGE% ^
-  --type app-image ^
-  --name IdleGridAgent ^
-  --input target ^
-  --main-jar %JAR% ^
-  --main-class com.idlegrid.agent.AgentMain ^
-  --app-version 1.0.0 ^
-  --win-console ^
-  --dest %DIST%
-
-if errorlevel 1 (
-    echo [ERROR] jpackage failed.
+if not exist "target\%JAR_NAME%" (
+    echo [ERROR] Expected JAR was not produced: target\%JAR_NAME%
     exit /b 1
 )
-echo       OK — %DIST%\IdleGridAgent\IdleGridAgent.exe
 
-echo.
-echo [4/4] Creating distributable ZIP...
-powershell -NoProfile -Command "Compress-Archive -Path 'dist\IdleGridAgent' -DestinationPath 'dist\IdleGridAgent-windows.zip' -Force"
-if errorlevel 1 (
-    echo [WARN] Could not create ZIP PowerShell Compress-Archive failed.
-) else (
-    echo       OK - %DIST%\IdleGridAgent-windows.zip
+echo [2/4] Preparing portable ZIP contents...
+if exist "%STAGE%" rmdir /s /q "%STAGE%"
+mkdir "%STAGE%"
+copy /y "target\%JAR_NAME%" "%STAGE%\%JAR_NAME%" >nul
+copy /y "agent.properties" "%STAGE%\agent.properties" >nul
+copy /y "run-agent.bat" "%STAGE%\run-agent.bat" >nul
+copy /y "setup.ps1" "%STAGE%\setup.ps1" >nul
+copy /y "QUICKSTART.txt" "%STAGE%\QUICKSTART.txt" >nul
+if not exist "%STAGE%\%JAR_NAME%" (
+    echo [ERROR] Could not copy the agent JAR.
+    exit /b 1
+)
+if not exist "%STAGE%\agent.properties" (
+    echo [ERROR] Could not copy agent.properties.
+    exit /b 1
+)
+if not exist "%STAGE%\run-agent.bat" (
+    echo [ERROR] Could not copy run-agent.bat.
+    exit /b 1
+)
+if not exist "%STAGE%\setup.ps1" (
+    echo [ERROR] Could not copy setup.ps1.
+    exit /b 1
+)
+if not exist "%STAGE%\QUICKSTART.txt" (
+    echo [ERROR] Could not prepare ZIP contents.
+    exit /b 1
 )
 
+echo [3/4] Creating %ZIP%...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '%STAGE%\*' -DestinationPath '%ZIP%' -Force"
+if errorlevel 1 (
+    echo [ERROR] Could not create %ZIP%.
+    exit /b 1
+)
+
+echo Copying the ZIP into the public landing page...
+if not exist "..\public-landing-page\public\downloads" mkdir "..\public-landing-page\public\downloads"
+copy /y "%ZIP%" "..\public-landing-page\public\downloads\%ZIP%" >nul
+if not exist "..\public-landing-page\public\downloads\%ZIP%" (
+    echo [ERROR] ZIP was built but could not be copied to the public landing page.
+    exit /b 1
+)
+
+echo [4/4] Done.
 echo.
-echo ============================================================
-echo  DONE.
-echo.
-echo  To run locally:
-echo    dist\IdleGridAgent\IdleGridAgent.exe
-echo.
-echo  To deploy to a lab PC:
-echo    1. Copy dist\IdleGridAgent-windows.zip to the PC
-echo    2. Extract it anywhere (e.g. C:\IdleGridAgent\)
-echo    3. Edit agent.properties inside the extracted folder
-echo    4. Run IdleGridAgent.exe
-echo.
-echo  Optionally set master.url by placing agent.properties next
-echo  to the EXE before running.
-echo ============================================================
+echo Created: %~dp0%ZIP%
+echo Landing page download updated: ..\public-landing-page\public\downloads\%ZIP%
+echo Extract it, edit agent.properties if needed, then double-click run-agent.bat.
 endlocal

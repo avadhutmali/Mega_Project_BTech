@@ -64,12 +64,13 @@ public class HeartbeatService implements Runnable {
     @Override
     public void run() {
         try {
-            double cpuFree   = monitor.getCpuFreePercent();
+            double cpuFree   = monitor.getCpuCores() * monitor.getCpuFreePercent() / 100.0;
             long   ramFree   = monitor.getRamFreeMb();
             long   diskFree  = monitor.getDiskFreeMb();
+            long   diskTotal = monitor.getDiskTotalMb();
             String idleState = nodeState.getState().name();
 
-            String body = buildPayload(cpuFree, ramFree, diskFree, idleState, "ONLINE");
+            String body = buildPayload(cpuFree, ramFree, diskFree, diskTotal, idleState, "ONLINE");
 
             HttpResponse<String> response = http.post("/nodes/heartbeat", body);
 
@@ -79,8 +80,8 @@ public class HeartbeatService implements Runnable {
                     LOG.info("Heartbeat resumed after " + prev + " failure(s)");
                 }
                 LOG.fine(String.format(
-                        "♥ heartbeat OK — cpu=%.1f%% ram=%dMB disk=%dMB idle=%s",
-                        cpuFree, ramFree, diskFree, idleState));
+                        "♥ heartbeat OK — cpu=%.2f cores ram=%dMB disk=%d/%dMB idle=%s",
+                        cpuFree, ramFree, diskFree, diskTotal, idleState));
             } else {
                 int failures = consecutiveFailures.incrementAndGet();
                 String status = response == null ? "no response (Master unreachable?)"
@@ -102,21 +103,22 @@ public class HeartbeatService implements Runnable {
     /**
      * Builds the heartbeat JSON payload manually.
      *
-     * <p>cpuFree is sent as an integer percentage (0–100) to match the backend's
-     * {@code HeartbeatRequest.cpuFree} which is declared as {@code int}.
-     * Jackson would truncate a double anyway, so we make this explicit.
+     * <p>CPU availability is expressed in core equivalents, matching job requests
+     * and Docker's {@code --cpus} value.
      */
-    private String buildPayload(double cpuFreeDouble, long ramFree, long diskFree,
+    private String buildPayload(double cpuFreeDouble, long ramFree, long diskFree, long diskTotal,
                                  String idleState, String status) {
-        int cpuFreeInt = (int) Math.round(cpuFreeDouble); // e.g. 75.3 → 75
         return String.format("""
                 {
                   "nodeId":     "%s",
                   "hostname":   "%s",
                   "ip":         "%s",
                   "sshCommand": "%s",
-                  "cpuFree":    %d,
+                  "cpuTotal":   %d,
+                  "cpuFree":    %.2f,
+                  "ramTotalMb": %d,
                   "ramFreeMb":  %d,
+                  "diskTotalMb": %d,
                   "diskFreeMb": %d,
                   "status":     "%s",
                   "idleState":  "%s"
@@ -125,8 +127,11 @@ public class HeartbeatService implements Runnable {
                 getHostname(),
                 config.getLocalIp(),
                 jsonEscape(config.getSshCommand()),
-                cpuFreeInt,
+                monitor.getCpuCores(),
+                cpuFreeDouble,
+                monitor.getRamTotalMb(),
                 ramFree,
+                diskTotal,
                 diskFree,
                 status,
                 idleState);

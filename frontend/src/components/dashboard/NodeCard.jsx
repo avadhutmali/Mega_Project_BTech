@@ -14,6 +14,7 @@ export default function NodeCard({ node }) {
   const online = node.status === 'ONLINE'
   const cpuPercent = node.cpuTotal ? Math.round(((node.cpuTotal - node.cpuFree) / node.cpuTotal) * 100) : 0
   const ramPercent = node.ramTotalMb ? Math.round(((node.ramTotalMb - node.ramFreeMb) / node.ramTotalMb) * 100) : 0
+  const diskPercent = node.diskTotalMb ? Math.round(((node.diskTotalMb - node.diskFreeMb) / node.diskTotalMb) * 100) : 0
   return (
     <article className={`group rounded-2xl border p-5 shadow-soft transition hover:-translate-y-0.5 
       ${isBooked ? 'border-amber-500/30 bg-amber-500/5 dark:bg-[#2a1d16]' : 'border-black/[0.07] bg-white dark:border-white/[0.08] dark:bg-[#211c19]'}`}>
@@ -25,6 +26,7 @@ export default function NodeCard({ node }) {
       <div className="mt-6 space-y-3">
         <ResourceBar icon={Cpu} label="CPU free" value={`${node.cpuFree ?? 0} / ${node.cpuTotal ?? 0}`} percent={100 - cpuPercent} />
         <ResourceBar icon={HardDrive} label="RAM free" value={`${node.ramFreeMb ?? 0} MB`} percent={100 - ramPercent} />
+        <ResourceBar icon={HardDrive} label="Disk free" value={`${formatGb(node.diskFreeMb)} / ${formatGb(node.diskTotalMb)} GB`} percent={100 - diskPercent} />
       </div>
       <div className="mt-5 flex items-center justify-between">
         <div className={`inline-flex rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.14em] ${online ? 'border-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'border-black/10 text-black/35 dark:border-white/10 dark:text-white/35'}`}>{node.status || 'UNKNOWN'}</div>
@@ -41,6 +43,10 @@ export default function NodeCard({ node }) {
       </div>
     </article>
   )
+}
+
+function formatGb(value = 0) {
+  return (Math.max(0, value) / 1024).toFixed(1)
 }
 
 function ResourceBar({ icon: Icon, label, value, percent }) {

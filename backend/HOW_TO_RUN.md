@@ -14,8 +14,7 @@ cd backend
 
 Starts on **`http://localhost:9090`**
 
-> **Note:** Port 8080 is occupied by Oracle TNS Listener on this machine.
-> The backend is permanently configured to use **port 9090** in `application.properties`.
+The backend listens on **port 9090**, configured in `application.properties`.
 
 ## Test it end to end with curl (no Agent needed yet)
 
@@ -23,7 +22,7 @@ Starts on **`http://localhost:9090`**
 ```powershell
 curl -X POST http://localhost:9090/nodes/heartbeat `
   -H "Content-Type: application/json" `
-  -d '{"nodeId":"pc-1","ip":"192.168.1.101","cpuFree":80,"ramFreeMb":4096}'
+  -d '{"nodeId":"pc-1","ip":"192.168.1.101","cpuTotal":8,"cpuFree":4,"ramTotalMb":8192,"ramFreeMb":4096,"diskTotalMb":512000,"diskFreeMb":256000,"status":"ONLINE"}'
 ```
 
 2. Check it registered:
@@ -31,11 +30,28 @@ curl -X POST http://localhost:9090/nodes/heartbeat `
 curl http://localhost:9090/nodes/summary
 ```
 
+## Upload and retrieve a file
+
+The dashboard has a **Storage** page. From PowerShell, you can also upload a file:
+
+```powershell
+curl.exe -X POST http://localhost:9090/storage/files -F "file=@C:\path\to\file.zip"
+```
+
+Save the returned `key`. Retrieve the same file later with:
+
+```powershell
+curl.exe -L -o file.zip http://localhost:9090/storage/files/<key>/content
+```
+
+The Master stores the primary copy under `backend/storage`; online Agents copy it into
+their `storage/` directory until there are two worker replicas or no eligible disk remains.
+
 3. Submit a job:
 ```powershell
 curl -X POST http://localhost:9090/jobs/submit `
   -H "Content-Type: application/json" `
-  -d '{"cpuReq":10,"ramReqMb":512,"command":"echo hello"}'
+  -d '{"cpuReq":1,"ramReqMb":512,"command":"echo hello"}'
 ```
 Note the `jobId` in the response.
 

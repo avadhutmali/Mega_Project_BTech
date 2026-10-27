@@ -36,4 +36,14 @@ export const idleGridApi = {
     method: 'POST',
     body: JSON.stringify(payload),
   }),
+  getStorageSummary: () => request('/storage/summary'),
+  getStoredFiles: () => request('/storage/files'),
+  uploadFile: async (file) => {
+    const body = new FormData()
+    body.append('file', file)
+    const response = await fetch(`${API_BASE}/storage/files`, { method: 'POST', body })
+    if (!response.ok) throw new Error((await response.text()) || `Upload failed (${response.status})`)
+    return response.json()
+  },
+  fileUrl: (key) => `${API_BASE}/storage/files/${encodeURIComponent(key)}/content`,
 }

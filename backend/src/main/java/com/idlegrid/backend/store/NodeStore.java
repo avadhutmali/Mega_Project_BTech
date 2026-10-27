@@ -21,14 +21,20 @@ public class NodeStore {
     private final Map<String, Node> nodes = new ConcurrentHashMap<>();
 
     /** Called on every heartbeat. Creates the node if it's new, otherwise refreshes it. */
-    public Node upsert(String id, String ip, String sshCommand, int cpuFree, int ramFreeMb) {
-        Node node = nodes.computeIfAbsent(id, k -> new Node(id, ip, cpuFree, ramFreeMb));
+    public Node upsert(String id, String ip, String sshCommand, double cpuTotal, double cpuFree,
+                       long ramTotalMb, long ramFreeMb, long diskTotalMb, long diskFreeMb, boolean online) {
+        Node node = nodes.computeIfAbsent(id, k -> new Node(id, ip, cpuTotal, cpuFree, ramTotalMb, ramFreeMb,
+                diskTotalMb, diskFreeMb));
         node.setIp(ip);
         node.setSshCommand(sshCommand);
+        node.setCpuTotal(cpuTotal);
         node.setCpuFree(cpuFree);
+        node.setRamTotalMb(ramTotalMb);
         node.setRamFreeMb(ramFreeMb);
+        node.setDiskTotalMb(diskTotalMb);
+        node.setDiskFreeMb(diskFreeMb);
         node.setLastHeartbeat(Instant.now());
-        node.setStatus(NodeStatus.ONLINE);
+        node.setStatus(online ? NodeStatus.ONLINE : NodeStatus.OFFLINE);
         return node;
     }
 

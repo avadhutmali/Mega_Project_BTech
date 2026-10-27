@@ -320,7 +320,7 @@ if ($allOk) {
     Write-Host "  ╚═══════════════════════════════════════════════════╝" -ForegroundColor Green
     Write-Host ""
     Write-Host "  Next steps:" -ForegroundColor Cyan
-    Write-Host "    1. Edit agent.properties  →  set master.url=http://<master-ip>:8081" -ForegroundColor White
+    Write-Host "    1. Edit agent.properties  →  set master.url=http://<master-ip>:9090 (or auto for LAN discovery)" -ForegroundColor White
     Write-Host "    2. Run: run.bat" -ForegroundColor White
     Write-Host ""
 } else {

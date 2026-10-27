@@ -28,10 +28,21 @@ public class ResourceMonitor {
     private static final Logger LOG = Logger.getLogger(ResourceMonitor.class.getName());
 
     private final com.sun.management.OperatingSystemMXBean osBean;
+    private final java.nio.file.Path storagePath;
 
     public ResourceMonitor() {
+        this(System.getProperty("user.dir"));
+    }
+
+    public ResourceMonitor(String storageDirectory) {
         this.osBean = (com.sun.management.OperatingSystemMXBean)
                 ManagementFactory.getOperatingSystemMXBean();
+        this.storagePath = Paths.get(storageDirectory).toAbsolutePath();
+        try {
+            Files.createDirectories(this.storagePath);
+        } catch (Exception e) {
+            LOG.warning("Could not prepare storage directory " + this.storagePath + ": " + e.getMessage());
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -120,10 +131,21 @@ public class ResourceMonitor {
      */
     public long getDiskFreeMb() {
         try {
-            var store = Files.getFileStore(Paths.get(System.getProperty("user.dir")));
+            var store = Files.getFileStore(storagePath);
             return store.getUsableSpace() / (1024L * 1024L);
         } catch (Exception e) {
             LOG.warning("Could not read disk free space: " + e.getMessage());
+            return -1;
+        }
+    }
+
+    /** Returns total disk space in MB on the volume containing the working directory. */
+    public long getDiskTotalMb() {
+        try {
+            var store = Files.getFileStore(storagePath);
+            return store.getTotalSpace() / (1024L * 1024L);
+        } catch (Exception e) {
+            LOG.warning("Could not read disk total space: " + e.getMessage());
             return -1;
         }
     }

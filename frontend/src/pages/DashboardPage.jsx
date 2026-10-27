@@ -8,6 +8,7 @@ export default function DashboardPage() {
   const { nodes, onlineNodes, loading, error } = useApp()
   const totalRam = onlineNodes.reduce((sum, node) => sum + (node.ramFreeMb || 0), 0)
   const totalCpu = onlineNodes.reduce((sum, node) => sum + (node.cpuFree || 0), 0)
+  const totalDisk = onlineNodes.reduce((sum, node) => sum + (node.diskFreeMb || 0), 0)
 
   return (
     <div className="animate-fade-in">
@@ -23,10 +24,11 @@ export default function DashboardPage() {
 
       {error && <div className="mt-6 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-xs text-red-600 dark:text-red-400">{error}. Start the Master service to see live capacity.</div>}
 
-      <section className="mt-10 grid gap-4 sm:grid-cols-3">
+      <section className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Online nodes" value={onlineNodes.length} detail={`${nodes.length} registered`} icon={Server} accent />
         <StatCard label="CPU available" value={totalCpu} detail="cores across grid" icon={Cpu} />
         <StatCard label="RAM available" value={`${Math.round(totalRam / 1024 * 10) / 10} GB`} detail="for new work" icon={HardDrive} />
+        <StatCard label="Disk available" value={`${(totalDisk / 1024).toFixed(1)} GB`} detail="across online nodes" icon={HardDrive} />
       </section>
 
       <section className="mt-12">

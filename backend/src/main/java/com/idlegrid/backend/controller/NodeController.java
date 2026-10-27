@@ -3,6 +3,7 @@ package com.idlegrid.backend.controller;
 import com.idlegrid.backend.dto.HeartbeatRequest;
 import com.idlegrid.backend.model.Node;
 import com.idlegrid.backend.store.NodeStore;
+import com.idlegrid.backend.service.StorageService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Collection;
@@ -12,15 +13,21 @@ import java.util.Collection;
 public class NodeController {
 
     private final NodeStore nodeStore;
+    private final StorageService storageService;
 
-    public NodeController(NodeStore nodeStore) {
+    public NodeController(NodeStore nodeStore, StorageService storageService) {
         this.nodeStore = nodeStore;
+        this.storageService = storageService;
     }
 
     /** Agent -> Master, every few seconds. Reports this node's current free capacity. */
     @PostMapping("/heartbeat")
     public Node heartbeat(@RequestBody HeartbeatRequest req) {
-        return nodeStore.upsert(req.nodeId(), req.ip(), req.sshCommand(), req.cpuFree(), req.ramFreeMb());
+        boolean online = !"OFFLINE".equalsIgnoreCase(req.status());
+        Node node = nodeStore.upsert(req.nodeId(), req.ip(), req.sshCommand(), req.cpuTotal(), req.cpuFree(),
+                req.ramTotalMb(), req.ramFreeMb(), req.diskTotalMb(), req.diskFreeMb(), online);
+        storageService.refreshReplicas();
+        return node;
     }
 
     /** Manual/demo visibility — shows every known node and its current status. */

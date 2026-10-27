@@ -6,19 +6,28 @@ public class Node {
     private String id;
     private String ip;
     private String sshCommand;
-    private int cpuFree;
-    private int ramFreeMb;
+    private double cpuTotal;
+    private double cpuFree;
+    private long ramTotalMb;
+    private long ramFreeMb;
+    private long diskTotalMb;
+    private long diskFreeMb;
     private Instant lastHeartbeat;
     private NodeStatus status = NodeStatus.ONLINE;
 
     public Node() {
     }
 
-    public Node(String id, String ip, int cpuFree, int ramFreeMb) {
+    public Node(String id, String ip, double cpuTotal, double cpuFree, long ramTotalMb, long ramFreeMb,
+                long diskTotalMb, long diskFreeMb) {
         this.id = id;
         this.ip = ip;
+        this.cpuTotal = cpuTotal;
         this.cpuFree = cpuFree;
+        this.ramTotalMb = ramTotalMb;
         this.ramFreeMb = ramFreeMb;
+        this.diskTotalMb = diskTotalMb;
+        this.diskFreeMb = diskFreeMb;
         this.lastHeartbeat = Instant.now();
         this.status = NodeStatus.ONLINE;
     }
@@ -47,21 +56,30 @@ public class Node {
         this.sshCommand = sshCommand;
     }
 
-    public int getCpuFree() {
+    public double getCpuTotal() { return cpuTotal; }
+    public void setCpuTotal(double cpuTotal) { this.cpuTotal = cpuTotal; }
+    public double getCpuFree() {
         return cpuFree;
     }
 
-    public void setCpuFree(int cpuFree) {
+    public void setCpuFree(double cpuFree) {
         this.cpuFree = cpuFree;
     }
 
-    public int getRamFreeMb() {
+    public long getRamTotalMb() { return ramTotalMb; }
+    public void setRamTotalMb(long ramTotalMb) { this.ramTotalMb = ramTotalMb; }
+    public long getRamFreeMb() {
         return ramFreeMb;
     }
 
-    public void setRamFreeMb(int ramFreeMb) {
+    public void setRamFreeMb(long ramFreeMb) {
         this.ramFreeMb = ramFreeMb;
     }
+
+    public long getDiskTotalMb() { return diskTotalMb; }
+    public void setDiskTotalMb(long diskTotalMb) { this.diskTotalMb = diskTotalMb; }
+    public long getDiskFreeMb() { return diskFreeMb; }
+    public void setDiskFreeMb(long diskFreeMb) { this.diskFreeMb = diskFreeMb; }
 
     public Instant getLastHeartbeat() {
         return lastHeartbeat;

@@ -38,6 +38,11 @@ public class JobController {
     /** Test client / frontend -> Master. Submits and immediately attempts first-fit assignment. */
     @PostMapping("/submit")
     public JobSubmitResponse submit(@RequestBody JobSubmitRequest req) {
+        if (!Double.isFinite(req.cpuReq()) || req.cpuReq() <= 0 || req.ramReqMb() <= 0) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "cpuReq and ramReqMb must be positive finite values");
+        }
         // When durationMinutes > 0 (booking flow), auto-build the SSH command.
         // Cap at 24 hours (1440 min) so no one can lock a machine indefinitely.
         String command;
@@ -103,15 +108,6 @@ public class JobController {
 
         job.setResult(req.result());
         job.setStatus(req.success() ? JobStatus.DONE : JobStatus.FAILED);
-
-        // free up the capacity this job was holding on its assigned node
-        if (job.getAssignedNode() != null) {
-            Node node = nodeStore.get(job.getAssignedNode());
-            if (node != null) {
-                node.setCpuFree(node.getCpuFree() + job.getCpuReq());
-                node.setRamFreeMb(node.getRamFreeMb() + job.getRamReqMb());
-            }
-        }
 
         return ResponseEntity.ok(job);
     }

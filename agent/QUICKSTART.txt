@@ -6,8 +6,7 @@ IdleGrid Agent — Portable Windows ZIP
    (next to run-agent.bat) in Notepad. Change master.url=auto to
    master.url=http://<master-PC-IP>:9090, for example
    master.url=http://192.168.1.25:9090. Save the file and restart run-agent.bat.
-   The JSONBin ID is preconfigured. If the rendezvous bin is private, configure a
-   read-only RENDEZVOUS_READ_KEY on this PC or in agent.properties.
+   The public JSONBin ID is preconfigured; Agents read it without an API key.
 3. Install Java 17 or newer if it is not already installed.
 4. Double-click run-agent.bat and leave its window open while the agent is running.
 

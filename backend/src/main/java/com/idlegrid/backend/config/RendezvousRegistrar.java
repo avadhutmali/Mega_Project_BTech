@@ -22,20 +22,16 @@ import java.nio.charset.StandardCharsets;
  *   Master starts → detects local IP → PUTs {"masterUrl":"http://<ip>:<port>"} to JSONBin
  *   Agent starts  → GETs the same bin → reads masterUrl → connects
  *
- * Required config in application.properties:
- *   rendezvous.jsonbin.api-key=YOUR_API_KEY
- *   rendezvous.jsonbin.bin-id=YOUR_BIN_ID
+ * Configure a public bin and set rendezvous.jsonbin.bin-id. This public-bin
+ * rendezvous intentionally uses no API key.
  *
- * If either property is blank/missing, registration is silently skipped.
+ * If the bin ID is blank/missing, registration is skipped.
  */
 @Component
 public class RendezvousRegistrar implements ApplicationListener<ServletWebServerInitializedEvent> {
 
     private static final Logger log = LoggerFactory.getLogger(RendezvousRegistrar.class);
     private static final String JSONBIN_UPDATE_URL = "https://api.jsonbin.io/v3/b/";
-
-    @Value("${rendezvous.jsonbin.api-key:}")
-    private String apiKey;
 
     @Value("${rendezvous.jsonbin.bin-id:}")
     private String binId;
@@ -45,8 +41,8 @@ public class RendezvousRegistrar implements ApplicationListener<ServletWebServer
 
     @Override
     public void onApplicationEvent(ServletWebServerInitializedEvent event) {
-        if (apiKey.isBlank() || binId.isBlank()) {
-            log.info("Rendezvous registration skipped (rendezvous.jsonbin.* not configured).");
+        if (binId.isBlank()) {
+            log.info("Rendezvous registration skipped (rendezvous.jsonbin.bin-id not configured).");
             return;
         }
 
@@ -74,8 +70,6 @@ public class RendezvousRegistrar implements ApplicationListener<ServletWebServer
                 conn = (HttpURLConnection) new URL(JSONBIN_UPDATE_URL + binId).openConnection();
                 conn.setRequestMethod("PUT");
                 conn.setRequestProperty("Content-Type", "application/json");
-                // JSONBin's core API key is sent as X-Master-Key for writes.
-                conn.setRequestProperty("X-Master-Key", apiKey);
                 conn.setDoOutput(true);
                 conn.setConnectTimeout(5000);
                 conn.setReadTimeout(5000);
@@ -85,10 +79,10 @@ public class RendezvousRegistrar implements ApplicationListener<ServletWebServer
 
                 int code = conn.getResponseCode();
                 if (code == 200) {
-                    log.info("Rendezvous registered Master URL (attempt {} of 3).", attempt);
+                    log.info("Rendezvous registered Master URL {} (attempt {} of 3).", masterUrl, attempt);
                     return;
                 }
-                log.warn("Rendezvous registration failed — HTTP {} (attempt {} of 3). Check JSONBIN_API_KEY, bin access, and write permission.",
+                log.warn("Rendezvous registration failed — HTTP {} (attempt {} of 3). Check that the configured JSONBin bin is public and writable.",
                         code, attempt);
             } catch (Exception e) {
                 log.warn("Rendezvous registration error (attempt {} of 3): {}", attempt, e.getMessage());

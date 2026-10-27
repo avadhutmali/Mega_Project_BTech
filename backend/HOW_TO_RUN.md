@@ -18,16 +18,14 @@ The backend listens on **port 9090**, configured in `application.properties`.
 
 ## Enable JSONBin Master discovery
 
-The Master publishes its URL using the Core API key configured in `application.properties`;
-override it with `JSONBIN_API_KEY` in the process environment. The default bin ID is configured;
-override it with `JSONBIN_BIN_ID` if using another bin.
+The configured rendezvous bin is public, so the Master and Agents use it without API keys.
+The default bin ID is configured; override it with `JSONBIN_BIN_ID` if using another bin.
 If the Master has multiple network interfaces, set `JSONBIN_MASTER_URL` to the address
 lab Agents can reach.
 
-Example in PowerShell (replace placeholders locally; do not commit keys):
+Example in PowerShell when auto-detection selects the wrong network interface:
 
 ```powershell
-$env:JSONBIN_API_KEY = "YOUR_CURRENT_JSONBIN_API_KEY"
 $env:JSONBIN_MASTER_URL = "http://<master-ip>:9090"
 .\mvnw.cmd spring-boot:run
 ```

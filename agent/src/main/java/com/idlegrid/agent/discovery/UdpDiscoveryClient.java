@@ -75,15 +75,10 @@ public class UdpDiscoveryClient {
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(5000);
             conn.setReadTimeout(5000);
-            String readKey = readProperty("rendezvous.jsonbin.read-key", "RENDEZVOUS_READ_KEY");
-            if (!readKey.isBlank()) {
-                conn.setRequestProperty("X-Access-Key", readKey);
-            }
-
             int code = conn.getResponseCode();
             if (code != 200) {
                 if (code == 403 || code == 401) {
-                    log.warning("  Rendezvous read denied. Make the bin public or configure a read-only RENDEZVOUS_READ_KEY.");
+                    log.warning("  Rendezvous read denied. Confirm the configured JSONBin bin is public.");
                 } else {
                     log.warning("  Rendezvous HTTP " + code);
                 }

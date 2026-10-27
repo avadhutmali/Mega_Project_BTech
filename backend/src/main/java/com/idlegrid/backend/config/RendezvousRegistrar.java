@@ -8,6 +8,7 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.stereotype.Component;
 
 import java.io.OutputStream;
+import java.net.DatagramSocket;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.URL;
@@ -59,7 +60,7 @@ public class RendezvousRegistrar implements ApplicationListener<ServletWebServer
         String masterUrl;
         try {
             masterUrl = configuredMasterUrl.isBlank()
-                    ? "http://" + InetAddress.getLocalHost().getHostAddress() + ":" + activePort
+                    ? "http://" + findRoutedLocalAddress().getHostAddress() + ":" + activePort
                     : trimTrailingSlash(configuredMasterUrl.trim());
         } catch (Exception e) {
             log.warn("Rendezvous registration could not determine Master URL: {}", e.getMessage());
@@ -100,6 +101,29 @@ public class RendezvousRegistrar implements ApplicationListener<ServletWebServer
                 catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
             }
         }
+    }
+
+    /**
+     * Ask the OS which local interface it would use to reach JSONBin. This is more
+     * reliable than InetAddress.getLocalHost(), which can resolve to loopback or a
+     * disconnected adapter on multi-homed lab PCs. UDP connect selects a route but
+     * does not send a packet.
+     */
+    private InetAddress findRoutedLocalAddress() throws Exception {
+        InetAddress rendezvousHost = InetAddress.getByName("api.jsonbin.io");
+        try (DatagramSocket routeProbe = new DatagramSocket()) {
+            routeProbe.connect(rendezvousHost, 443);
+            InetAddress localAddress = routeProbe.getLocalAddress();
+            if (!localAddress.isAnyLocalAddress() && !localAddress.isLoopbackAddress()) {
+                return localAddress;
+            }
+        }
+
+        InetAddress fallback = InetAddress.getLocalHost();
+        if (fallback.isAnyLocalAddress() || fallback.isLoopbackAddress()) {
+            throw new IllegalStateException("No non-loopback network address was found");
+        }
+        return fallback;
     }
 
     private String trimTrailingSlash(String value) {

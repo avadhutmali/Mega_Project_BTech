@@ -28,7 +28,7 @@ jobs:
       - name: Build and publish CPU/Gloo image
         uses: docker/build-push-action@v6
         with:
-          context: agent/training-worker
+          context: .
           file: agent/training-worker/Dockerfile
           push: true
           tags: ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest

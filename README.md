@@ -1,98 +1,35 @@
-# 🌐 IdleGrid
+# IdleGrid
 
-**IdleGrid** is a distributed cloud compute platform built for university laboratory networks. It transforms idle, underutilized lab PCs into a powerful, decentralized compute cluster—allowing students to run intensive computational jobs across the network **without interrupting the PC's primary user**.
+IdleGrid is a campus-lab compute prototype. A Spring Boot Master tracks lab PCs, schedules containerized jobs, manages shared files with worker replicas, and coordinates CPU-first PyTorch DDP runs. Java Agents on Windows PCs report capacity and run Docker containers; a React dashboard provides monitoring and submission screens.
 
-By leveraging Docker and WSL2's native resource capping (`.wslconfig`), IdleGrid achieves strict "co-tenancy." A job can run in the background with a hard limit on CPU and RAM, ensuring the PC's physical owner experiences zero performance degradation.
+## Project documentation
 
----
+- [Detailed project and technical guide](DETAILED_README.md) — architecture, workflows, APIs, setup, limitations, demo plan, and report/PPT outline.
+- [Backend API and setup](backend/README.md)
+- [Backend run instructions](backend/HOW_TO_RUN.md)
+- [Agent setup and configuration](agent/README.md)
+- [Project motivation and roadmap context](docs/PROJECT_CONTEXT.md)
+- [PyTorch DDP example](examples/distributed-image-training/README.md)
 
-## 🏗️ Architecture & Components
+## Quick start
 
-The IdleGrid ecosystem is divided into four main components:
+Start the Master on port 9090:
 
-### 1. Master Backend (`/backend`)
-The brain of the cluster. Built with **Java & Spring Boot**.
-* **Node Management:** Tracks which lab PCs are currently online via heartbeats and monitors their available CPU/RAM capacity.
-* **Job Scheduling:** Receives job requests (with specific CPU/RAM requirements) and assigns them to the most suitable available node using a first-fit algorithm.
-* **State Tracking:** Maintains an in-memory ledger of all queued, running, and completed jobs.
-* **Shared Files:** Stores uploads with a random access key and places up to two worker replicas when online disk capacity allows.
-
-### 2. The Agent (`/agent`)
-The worker process that runs silently on each lab PC. Built with **Java** and packaged as a native Windows executable (`.exe`).
-* **Heartbeats:** Continuously pings the Master backend to announce its presence and available hardware resources.
-* **Storage Replicas:** Reports disk capacity and pulls assigned file copies into its local storage directory.
-* **Job Execution:** When assigned a job, it pulls the requested Docker image and executes the job command.
-* **Resource Isolation:** Job containers are strictly constrained by the lab PC's WSL2 configuration, ensuring the local user is never disrupted.
-* **Auto-Installer (`agent/installer`):** Includes a zero-dependency, native Windows setup executable (`IdleGrid-Setup.exe`) that automatically enables WSL2 and installs Docker Desktop in the background.
-
-### 3. Internal Dashboard (`/frontend`)
-The control panel for submitting jobs. Built with **React, Vite, and TailwindCSS**.
-* **Live Node Map:** See a real-time list of all connected lab PCs, their IP addresses, and their current resource availability.
-* **Job Submission:** A clean form to submit arbitrary commands or scripts, specifying exactly how much CPU and RAM the job requires.
-* **Job Tracking:** Watch jobs move from `QUEUED` to `ASSIGNED` to `RUNNING` or `FAILED`, and grab SSH connection strings to connect directly to running jobs.
-* **File Storage:** Upload files, see worker disk capacity, copy an access key, and retrieve that file later.
-
-### 4. Public Portal (`/public-landing-page`)
-The public-facing showcase website. Built with **React & Vite**.
-* **User Onboarding:** Explains the IdleGrid concept to students and lab administrators.
-* **1-Click Download:** Provides a direct link to download the latest `IdleGrid-Setup.exe` from GitHub Releases so anyone can contribute their PC to the grid.
-
----
-
-## 🚀 CI/CD Automation (GitHub Actions)
-
-IdleGrid utilizes a fully automated cloud build pipeline via **GitHub Actions** (`.github/workflows/release.yml`). 
-
-Whenever code is pushed to the `main` branch, the pipeline wakes up a cloud Windows server and automatically:
-1. Compiles the Agent Java code into a fat JAR.
-2. Uses `jpackage` to bundle the Agent with a native JRE into a standalone `.exe`.
-3. Packages the Agent into a distributable `.zip`.
-4. Uses Windows `IExpress` to compile the `IdleGrid-Setup.exe` auto-installer.
-5. Publishes all of these artifacts directly to the **GitHub Releases** page under the `latest` tag.
-
----
-
-## 🛠️ Local Development & Setup
-
-### Prerequisites
-* Java 17+
-* Node.js & npm (for frontends)
-* Maven
-
-### Running the Backend
 ```bash
 cd backend
-mvn spring-boot:run
-# The backend will start on http://localhost:9090
+./mvnw spring-boot:run
 ```
 
-### Running the Internal Dashboard
+Start the internal dashboard:
+
 ```bash
 cd frontend
 npm install
 npm run dev
-# Open http://localhost:5173
 ```
 
-### Building the Agent Locally (Windows Only)
-If you want to manually build the agent executables on your local machine instead of waiting for GitHub Actions:
-```cmd
-cd agent
-package.bat
-```
-This will output the `IdleGridAgent-windows.zip` in the `agent/dist/` folder.
+Open `http://localhost:5173`. Extract the Windows Agent ZIP, configure `agent.properties` if automatic Master discovery is unavailable, and start `run-agent.bat`. See the detailed guide for Docker/WSL2, DDP networking, and storage setup.
 
-To manually build the Installer EXE:
-```cmd
-cd agent/installer
-Compile-Setup.bat
-```
-This will generate `IdleGrid-Setup.exe`.
+## Current scope
 
----
-
-## 🔒 Current Scope (Phase 1 Prototype)
-This repository currently represents the Phase 1 Proof-of-Concept. 
-* **In-Memory Only:** Job and node states are stored in-memory in the backend for simplicity during demos. (No external database).
-* **No Authentication:** The API and frontend are open to demonstrate the core scheduling and execution loops. 
-* **Focus:** The primary goal of this milestone is to successfully demonstrate a distributed Docker job running on a lab PC without disrupting an active user.
+This is a prototype for a trusted lab network. Node/job/booking/training-run control state is in memory; there is no authentication or database. Shared file bytes and a JSON index persist on the Master filesystem. Multi-node DDP needs direct TCP connectivity and an available worker image; a public GHCR package alone does not guarantee the required image tag has been published.

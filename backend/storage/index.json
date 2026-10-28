@@ -1,0 +1,25 @@
+[ {
+  "key" : "1066f9e6-0949-4731-9551-ed7b11a2c542",
+  "fileName" : "Avadhut_Mali_SDE_CV.pdf",
+  "contentType" : "application/pdf",
+  "sizeBytes" : 75817,
+  "createdAt" : "2026-10-27T06:05:55.244882540Z",
+  "status" : "AVAILABLE",
+  "replicaNodeIds" : [ "4de9a009-cf1e-405f-b28f-953b5028f3e9", "8347331c-0e4d-4224-be04-f8ce5af1761b" ]
+}, {
+  "key" : "95df8f77-b720-4188-afff-7e0ef131fbc0",
+  "fileName" : "Receipt_R210262751_22102026061841.pdf",
+  "contentType" : "application/pdf",
+  "sizeBytes" : 160686,
+  "createdAt" : "2026-10-27T06:07:19.858185651Z",
+  "status" : "AVAILABLE",
+  "replicaNodeIds" : [ "8347331c-0e4d-4224-be04-f8ce5af1761b", "4de9a009-cf1e-405f-b28f-953b5028f3e9" ]
+}, {
+  "key" : "02e1d44d-5107-4554-8947-548dd23d0596",
+  "fileName" : "train.py",
+  "contentType" : "text/x-python",
+  "sizeBytes" : 3066,
+  "createdAt" : "2026-10-28T05:51:18.967091906Z",
+  "status" : "AVAILABLE",
+  "replicaNodeIds" : [ "f42cd209-48da-450f-a586-35f93eb4f3ea", "28364ff8-37e3-4260-b65f-dca6b22f0398" ]
+} ]

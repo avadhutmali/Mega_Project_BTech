@@ -188,12 +188,11 @@ The full learning document is [DDP and Distributed Training](../docs/DDP_DISTRIB
 
 The Spring Master and PyTorch coordinator are different: the backend is the HTTP/control service on port 9090; rank zero is one Agent PC and is the Gloo/torchrun rendezvous host on TCP port 29500. Peer-to-peer reachability and Docker Desktop host networking are required.
 
-The image used by the dashboard defaults to `ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest`. The GHCR package must contain a successfully published image manifest; public visibility alone does not create the `latest` tag. If the pull returns `not found`, build the worker image locally on each Agent using the exact requested tag until the GHCR workflow succeeds:
+The dashboard pins the worker image to the digest supplied for the lab demo: `ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221`. This avoids depending on the missing `latest` tag. Pull that exact reference on every selected Agent PC and confirm it succeeds before submitting a DDP run.
 
 ```powershell
 # From the extracted Agent directory
-docker build -t ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest `
-  -f training-worker/Dockerfile training-worker
+docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221
 ```
 
 The child jobs and run metadata are still in memory. Training bundles/artifacts live on the Master filesystem, and the current implementation does not checkpoint or restart a failed DDP group.

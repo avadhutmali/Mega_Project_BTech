@@ -151,13 +151,12 @@ On each selected Agent PC:
 
 - Enable Docker Desktop host networking (4.34+) under **Settings → Resources → Network**.
 - Allow TCP reachability among selected PCs on the lab LAN, including the DDP coordinator's port 29500 and access to the Master backend.
-- Ensure the PyTorch CPU worker image exists locally. The dashboard uses `ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest`. GHCR publication must be verified before relying on `docker pull`; if the tag is not yet available publicly, build the Dockerfile on every Agent using the same image tag:
+- Ensure the PyTorch CPU worker image exists locally. The dashboard pins the digest supplied for the lab demo because `latest` was reported as unavailable:
 
 ```powershell
 # Run from the extracted Agent directory
 
-docker build -t ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest `
-  -f training-worker/Dockerfile training-worker
+docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221
 ```
 
 Then open **Distributed training**, upload the example ZIP, and submit:
@@ -168,7 +167,7 @@ train.py --epochs 2 --batch-size 32
 
 Select 2 or 3 workers and set per-PC CPU/RAM requests. All selected nodes need to be online and have enough free capacity. A worker failure or eviction fails the DDP group; there is no checkpoint-based recovery.
 
-**GHCR status note:** the publishing workflow exists, but a public pull of the image tag/digest has not been verified in this project snapshot. A public package page alone is not proof that a `latest` image manifest has been pushed. Confirm the Actions publish job succeeds and `docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest` works before using the remote image. A digest reference only works after that exact manifest digest has been uploaded.
+**GHCR status note:** the `latest` pull was reported as missing. The configured digest is the one supplied for the demo; its availability still needs to be confirmed by running the pull command on a lab PC.
 
 ## 6. REST API reference
 
@@ -331,16 +330,15 @@ master.url=http://<master-pc-ip>:9090
 
 For the Windows setup helper, run `setup.ps1` in an elevated PowerShell session only after reviewing what it changes. It enables/configures WSL and Docker Desktop settings. Restart/reboot may be necessary for Windows features or Docker settings to take effect.
 
-### 8.4 Build the DDP worker image locally
+### 8.4 Pull the pinned DDP worker image
 
-From the extracted Agent directory, build the exact image tag the dashboard requests:
+On each Agent PC, pull the same immutable image used by both dashboards:
 
 ```powershell
-docker build -t ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest `
-  -f training-worker/Dockerfile training-worker
+docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221
 ```
 
-A locally built image with this tag lets the Agent's image inspection succeed without contacting GHCR. The Agent ZIP includes the Dockerfile and its README, not the built image layers.
+The Agent ZIP includes the Dockerfile and README, not the built image layers. Verify the pull succeeds before scheduling a DDP run.
 
 ## 9. Repository map
 

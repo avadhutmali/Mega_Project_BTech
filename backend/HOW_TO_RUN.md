@@ -36,11 +36,11 @@ The dashboard has a separate **Distributed training** page. On every Agent PC, p
 CPU/Gloo image:
 
 ```powershell
-docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest
+docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221
 ```
 
-If the package is not public yet, build locally with
-`docker build -t idlegrid-pytorch-cpu:latest -f training-worker/Dockerfile training-worker`.
+The project pins the image to the digest supplied for the lab demo because the `latest`
+tag was reported as unavailable. Verify this exact pull on each selected PC before a run.
 
 Also enable Docker Desktop host networking (4.34+) and allow TCP connections among the
 selected lab PCs. Upload a ZIP containing a DDP-aware Python entrypoint and

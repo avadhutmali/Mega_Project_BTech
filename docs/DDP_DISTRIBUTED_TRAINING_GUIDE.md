@@ -214,12 +214,11 @@ The Master keeps a run's bundle on its local filesystem, in a run-specific direc
 - Enough live free CPU and RAM for the submitted request.
 - A running IdleGrid Agent connected to the same Master.
 
-The worker image recipe is [`agent/training-worker/Dockerfile`](../agent/training-worker/Dockerfile). The Agent ZIP includes this recipe, not the built image layers. The dashboard currently requests `ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest`. The reported GHCR pull currently returns `not found`, so do not assume the registry has a usable tag. Until a publish run succeeds, build the exact requested tag on every Agent PC:
+The worker image recipe is [`agent/training-worker/Dockerfile`](../agent/training-worker/Dockerfile). The Agent ZIP includes this recipe, not the built image layers. The dashboard uses the digest supplied for the lab demo; the earlier `latest` reference returned `not found`. Pull the pinned digest on every Agent PC and verify it before starting DDP:
 
 ```powershell
 # Run from the extracted Agent directory
-docker build -t ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest `
-  -f training-worker/Dockerfile training-worker
+docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221
 ```
 
 The Agent checks for the image locally before trying `docker pull`, so a local build under the exact image name can be used while the GHCR tag is unavailable.
@@ -239,7 +238,7 @@ Heartbeat success only proves that an Agent can contact the backend. It does **n
 2. Start the dashboard with `VITE_MASTER_URL` set to the Master URL if it is not local.
 3. Install/configure the Agent on every worker PC and confirm each appears online.
 4. Enable Docker Desktop host networking and check firewall/network reachability.
-5. Build or pull `ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest` on every Agent PC.
+5. Pull the pinned worker image digest on every Agent PC and verify it is available locally.
 6. Open the dashboard's **Distributed training** page.
 7. Upload [`idlegrid-ddp-image-demo.zip`](../examples/distributed-image-training/idlegrid-ddp-image-demo.zip).
 8. Use `train.py --epochs 2 --batch-size 32`, choose 2 or 3 workers, and request resources that every selected PC can provide.
@@ -253,7 +252,7 @@ The generated shape dataset is a systems smoke-test: it demonstrates process-gro
 ### Check Docker image availability on each PC
 
 ```powershell
-docker image inspect ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest
+  docker image inspect ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221
 ```
 
 If it is missing and GHCR has a published public image, `docker pull` should work. Otherwise build the image locally using the command above.
@@ -283,7 +282,7 @@ After building the image and ensuring the bundle is in a mounted/current directo
 | Symptom | Likely cause | What to check |
 |---|---|---|
 | Submission says insufficient workers | Too few online nodes meet each worker's CPU/RAM request, or nodes already have jobs | Node page, active jobs, and per-worker resource requests |
-| Agent reports image pull failure or `not found` | GHCR image/tag absent, private, or misspelled; local image tag differs | Verify exact `ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest`; build locally with that exact tag or publish the image |
+| Agent reports image pull failure or `not found` | The pinned digest is unavailable/private or the PC cannot reach GHCR | Run the exact `docker pull` command from `QUICKSTART.txt` and verify the package visibility/digest |
 | One rank stays `ASSIGNED`/`STARTING` | Agent is offline, busy, or not polling; Docker image startup is still in progress | Agent logs, heartbeat timestamp, Docker status, node/job assignment |
 | Process group times out | Wrong coordinator IP/port, a firewall/VLAN/client-isolation rule, or host networking not enabled | Test TCP 29500, confirm rank 0 IP, enable Docker Desktop host networking |
 | Training says file/class folder missing | ZIP layout does not match the training script's paths | Put `train.py` at archive root and use the expected `data/<class>/...` tree |

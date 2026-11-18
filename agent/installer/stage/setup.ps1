@@ -1,10 +1,10 @@
 # =============================================================================
-# IdleGrid Agent — One-Time Setup Script for Lab PCs
+# IdleGrid Agent - One-Time Setup Script for Lab PCs
 # =============================================================================
 # Run this script ONCE on each lab PC (as Administrator) before deploying the
 # agent. It will:
-#   1. Enable WSL2 (Windows Subsystem for Linux v2)
-#   2. Install Docker Desktop (silently)
+#   1. Install/enable WSL2 without an unnecessary Linux distribution
+#   2. Install Docker Desktop with winget (official installer fallback)
 #   3. Configure Docker Desktop (WSL2 backend, sensible resource limits)
 #   4. Check / prompt for Java 17+
 #   5. Verify everything is working
@@ -13,8 +13,8 @@
 #   Set-ExecutionPolicy Bypass -Scope Process -Force
 #   .\setup.ps1
 #
-# A REBOOT is required after WSL2 features are enabled (Step 1).
-# Re-run the script after rebooting — it is fully idempotent.
+# A REBOOT may be required after WSL2 is installed (Step 1).
+# Re-run the script after rebooting - it is fully idempotent.
 # =============================================================================
 
 $ErrorActionPreference = "Stop"
@@ -30,12 +30,12 @@ function Write-Info  { param($msg)    Write-Host "    ... $msg" -ForegroundColor
 # ─── Banner ───────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  ╔══════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "  ║   IdleGrid Agent — Lab PC Setup  v1.0        ║" -ForegroundColor Cyan
+Write-Host "  ║   IdleGrid Agent - Lab PC Setup  v1.0        ║" -ForegroundColor Cyan
 Write-Host "  ╚══════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
 # =============================================================================
-# Step 0 — Must be running as Administrator
+# Step 0 - Must be running as Administrator
 # =============================================================================
 Write-Step 0 "Checking Administrator privileges"
 $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
@@ -45,17 +45,17 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 Write-Ok "Running as Administrator"
 
 # =============================================================================
-# Step 1 — Check Windows version (WSL2 needs build 19041+)
+# Step 1 - Check Windows version (WSL2 needs build 19041+)
 # =============================================================================
 Write-Step 1 "Checking Windows version"
 $build = [System.Environment]::OSVersion.Version.Build
 if ($build -lt 19041) {
     Write-Fail "Windows build $build detected. WSL2 requires Windows 10 build 19041 (version 2004) or later."
 }
-Write-Ok "Windows build $build — OK"
+Write-Ok "Windows build $build - OK"
 
 # =============================================================================
-# Step 2 — Enable WSL + Virtual Machine Platform features
+# Step 2 - Enable WSL + Virtual Machine Platform features
 # =============================================================================
 Write-Step 2 "Enabling WSL2 Windows features"
 
@@ -82,12 +82,34 @@ if ($vmState -ne "Enabled") {
     Write-Ok "VirtualMachinePlatform already enabled"
 }
 
+# Install/update WSL without installing Ubuntu. Docker Desktop uses the WSL2
+# engine directly, so a separate Linux distribution is not needed for IdleGrid.
+try {
+    & wsl.exe --status *> $null
+    $wslStatusExitCode = $LASTEXITCODE
+    if ($wslStatusExitCode -eq 0 -and $wslState -eq "Enabled" -and $vmState -eq "Enabled") {
+        Write-Ok "WSL is already installed; skipping installation"
+    } else {
+        $wslInstallOutput = (& wsl.exe --install --no-distribution 2>&1 | Out-String)
+        $wslInstallExitCode = $LASTEXITCODE
+        if ($wslInstallExitCode -eq 0) {
+            Write-Ok "WSL installed/updated without a Linux distribution"
+            if ($wslInstallOutput -match "(?i)restart|reboot") { $rebootNeeded = $true }
+        } else {
+            Write-Warn "wsl --install --no-distribution returned $wslInstallExitCode; Windows features were checked/enabled above."
+            if ($wslInstallOutput.Trim()) { Write-Info $wslInstallOutput.Trim() }
+        }
+    }
+} catch {
+    Write-Warn "Could not run wsl --install --no-distribution; Windows feature setup above remains in place. $_"
+}
+
 # Set WSL default version to 2
 try {
     wsl --set-default-version 2 2>&1 | Out-Null
     Write-Ok "WSL default version set to 2"
 } catch {
-    Write-Warn "Could not set WSL default version — will be set automatically after reboot"
+    Write-Warn "Could not set WSL default version - will be set automatically after reboot"
 }
 
 if ($rebootNeeded) {
@@ -106,40 +128,60 @@ if ($rebootNeeded) {
 }
 
 # =============================================================================
-# Step 3 — Install Docker Desktop (if not already installed)
+# Step 3 - Install Docker Desktop with winget (official installer fallback)
 # =============================================================================
 Write-Step 3 "Checking Docker Desktop"
 
-$dockerInstalled = $false
 $dockerExe = "$Env:ProgramFiles\Docker\Docker\Docker Desktop.exe"
-$dockerCli = "$Env:ProgramFiles\Docker\Docker\resources\bin\docker.exe"
-
-# Also check PATH
-try { $null = Get-Command docker -ErrorAction Stop; $dockerInstalled = $true } catch {}
-if (Test-Path $dockerExe) { $dockerInstalled = $true }
+$dockerInstalled = Test-Path $dockerExe
 
 if ($dockerInstalled) {
-    Write-Ok "Docker Desktop is already installed — skipping download"
+    Write-Ok "Docker Desktop is already installed - skipping download"
 } else {
-    Write-Info "Downloading Docker Desktop installer (~600 MB — please wait)..."
-    $dockerInstallerUrl = "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
-    $installerPath = "$Env:TEMP\DockerDesktopInstaller.exe"
-
-    try {
-        Invoke-WebRequest -Uri $dockerInstallerUrl -OutFile $installerPath -UseBasicParsing
-        Write-Ok "Download complete: $installerPath"
-    } catch {
-        Write-Fail "Failed to download Docker Desktop: $_`nDownload manually from https://www.docker.com/products/docker-desktop/"
+    $wingetCommand = Get-Command winget -ErrorAction SilentlyContinue
+    if ($wingetCommand) {
+        Write-Info "Installing Docker Desktop with winget (silent install)..."
+        try {
+            & $wingetCommand.Source install -e --id Docker.DockerDesktop `
+                --accept-package-agreements --accept-source-agreements --silent
+            $wingetExitCode = $LASTEXITCODE
+            if ($wingetExitCode -eq 0 -or (Test-Path $dockerExe)) {
+                $dockerInstalled = Test-Path $dockerExe
+                if ($dockerInstalled) { Write-Ok "Docker Desktop installed with winget" }
+            } else {
+                Write-Warn "winget returned exit code $wingetExitCode; trying the official installer fallback."
+            }
+        } catch {
+            Write-Warn "winget installation failed; trying the official installer fallback. $_"
+        }
+    } else {
+        Write-Warn "winget was not found; using the official Docker Desktop installer fallback."
     }
 
-    Write-Info "Installing Docker Desktop silently (this takes ~2 minutes)..."
-    $proc = Start-Process -FilePath $installerPath `
-                          -ArgumentList "install --quiet --accept-license --backend=wsl-2" `
-                          -Wait -PassThru
-    if ($proc.ExitCode -ne 0) {
-        Write-Fail "Docker Desktop installer exited with code $($proc.ExitCode)"
+    if (-not (Test-Path $dockerExe)) {
+        Write-Info "Downloading Docker Desktop installer from Docker..."
+        $dockerInstallerUrl = "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
+        $installerPath = "$Env:TEMP\DockerDesktopInstaller.exe"
+
+        try {
+            Invoke-WebRequest -Uri $dockerInstallerUrl -OutFile $installerPath -UseBasicParsing
+            Write-Ok "Download complete: $installerPath"
+        } catch {
+            Write-Fail "Failed to download Docker Desktop: $_`nInstall winget or download manually from https://www.docker.com/products/docker-desktop/"
+        }
+
+        Write-Info "Installing Docker Desktop silently (this takes a few minutes)..."
+        $proc = Start-Process -FilePath $installerPath `
+                              -ArgumentList "install --quiet --accept-license --backend=wsl-2" `
+                              -Wait -PassThru
+        if ($proc.ExitCode -ne 0) {
+            Write-Fail "Docker Desktop installer exited with code $($proc.ExitCode)"
+        }
+        if (-not (Test-Path $dockerExe)) {
+            Write-Fail "Docker Desktop installer completed, but Docker Desktop.exe was not found at $dockerExe"
+        }
+        Write-Ok "Docker Desktop installed successfully"
     }
-    Write-Ok "Docker Desktop installed successfully"
 
     # Refresh PATH so docker is available in this session
     $Env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" +
@@ -147,7 +189,7 @@ if ($dockerInstalled) {
 }
 
 # =============================================================================
-# Step 4 — Start Docker Desktop and wait for it to be ready
+# Step 4 - Start Docker Desktop and wait for it to be ready
 # =============================================================================
 Write-Step 4 "Starting Docker Desktop and waiting for it to be ready"
 
@@ -179,7 +221,7 @@ if (-not $ready) {
 }
 
 # =============================================================================
-# Step 5 — Configure Docker Desktop for IdleGrid
+# Step 5 - Configure Docker Desktop for IdleGrid
 # =============================================================================
 Write-Step 5 "Configuring Docker Desktop for IdleGrid"
 
@@ -202,10 +244,15 @@ if (-not (Test-Path $settingsDir)) {
 $settings = @{}
 if (Test-Path $settingsFile) {
     try {
-        $settings = Get-Content $settingsFile -Raw | ConvertFrom-Json -AsHashtable
-        Write-Info "Existing Docker settings found — merging IdleGrid config"
+        # ConvertFrom-Json -AsHashtable is unavailable in Windows PowerShell 5.1.
+        # Copy properties explicitly so rerunning setup preserves existing settings.
+        $existingSettings = Get-Content $settingsFile -Raw | ConvertFrom-Json
+        foreach ($property in $existingSettings.PSObject.Properties) {
+            $settings[$property.Name] = $property.Value
+        }
+        Write-Info "Existing Docker settings found - merging IdleGrid config"
     } catch {
-        Write-Warn "Could not parse existing settings — writing fresh config"
+        Write-Warn "Could not parse existing settings - writing fresh config"
         $settings = @{}
     }
 }
@@ -226,6 +273,17 @@ Write-Ok "  Memory: $dockerRamMb MB"
 Write-Ok "  CPUs: $cpuCount"
 Write-Ok "  Auto-start: enabled"
 
+try {
+    $savedSettings = Get-Content $settingsFile -Raw | ConvertFrom-Json
+    if ($savedSettings.autoStart -eq $true) {
+        Write-Ok "Verified: Docker Desktop starts when this Windows user signs in"
+    } else {
+        Write-Warn "Docker auto-start could not be verified. In Docker Desktop, enable Settings > General > Start Docker Desktop when you sign in."
+    }
+} catch {
+    Write-Warn "Could not verify Docker auto-start in settings. Check Docker Desktop Settings > General after it starts."
+}
+
 # Restart Docker Desktop to apply new settings
 Write-Info "Restarting Docker Desktop to apply settings..."
 try {
@@ -235,11 +293,11 @@ try {
     Start-Sleep -Seconds 8
     Write-Ok "Docker Desktop restarted"
 } catch {
-    Write-Warn "Could not restart Docker Desktop automatically — please restart it manually"
+    Write-Warn "Could not restart Docker Desktop automatically - please restart it manually"
 }
 
 # =============================================================================
-# Step 6 — Check Java 17+
+# Step 6 - Check Java 17+
 # =============================================================================
 Write-Step 6 "Checking Java 17+"
 
@@ -251,7 +309,7 @@ try {
     if ($javaVer -match '"(\d+)') {
         $major = [int]$Matches[1]
         if ($major -ge 17) {
-            Write-Ok "Java $major — OK (17+ required)"
+            Write-Ok "Java $major - OK (17+ required)"
             $javaOk = $true
         } else {
             Write-Warn "Java $major found but IdleGrid requires Java 17 or later"
@@ -271,7 +329,7 @@ if (-not $javaOk) {
 }
 
 # =============================================================================
-# Step 7 — Final verification
+# Step 7 - Final verification
 # =============================================================================
 Write-Step 7 "Final system verification"
 
@@ -281,7 +339,7 @@ $allOk = $true
 try {
     $out = docker info 2>&1
     if ($LASTEXITCODE -eq 0) {
-        Write-Ok "docker info — Docker daemon responding"
+        Write-Ok "docker info - Docker daemon responding"
     } else {
         Write-Warn "docker info returned non-zero. Docker may still be starting."
         $allOk = $false
@@ -293,7 +351,7 @@ try {
 
 # Pull a tiny test image
 try {
-    Write-Info "Pulling alpine:latest (smoke test — ~3 MB)..."
+    Write-Info "Pulling alpine:latest (smoke test - ~3 MB)..."
     docker pull alpine:latest 2>&1 | Out-Null
     $result = docker run --rm alpine:latest echo "IdleGrid OK" 2>&1
     if ($result -match "IdleGrid OK") {
@@ -311,7 +369,7 @@ try {
 if (-not $javaOk) { $allOk = $false }
 
 # =============================================================================
-# Step 8 — Summary
+# Step 8 - Summary
 # =============================================================================
 Write-Host ""
 if ($allOk) {

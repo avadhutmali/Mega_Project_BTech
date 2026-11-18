@@ -77,7 +77,7 @@ public class DistributedTrainingService {
         }
 
         String finalImage = image == null || image.isBlank()
-                ? "ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest" : image.trim();
+                ? "ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221" : image.trim();
         String finalOutput = outputFile == null || outputFile.isBlank() ? "model.pt" : outputFile.trim();
         return scheduler.coordinatePlacement(() -> {
             List<Node> selected = selectNodes(workerCount, cpuReq, ramReqMb);

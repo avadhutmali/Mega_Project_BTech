@@ -27,8 +27,9 @@ WSL2 and Docker on a lab PC.
 
 ### Prerequisites (per lab PC — run `setup.ps1` once)
 
-> **The easiest way:** run `setup.ps1` (included in the ZIP) as Administrator — it
-> handles all prerequisites automatically.
+> **The easiest way:** run `setup.ps1` (included in the ZIP) as Administrator. It enables
+> WSL2, installs Docker Desktop with `winget` when available (official installer fallback),
+> and configures Docker Desktop to start when the signed-in Windows user logs in.
 
 ```powershell
 # In an Administrator PowerShell, from the extracted IdleGridAgent folder:
@@ -37,14 +38,15 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 ```
 
 `setup.ps1` will:
-- ✅ Enable WSL2 and Virtual Machine Platform Windows features
-- ✅ Download and silently install Docker Desktop
+- ✅ Install/update WSL without adding an unused Linux distribution and enable required Windows features
+- ✅ Install Docker Desktop using `winget install -e --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements` (official installer fallback if winget is unavailable)
 - ✅ Configure Docker Desktop (WSL2 backend, resource limits, auto-start)
 - ✅ Check Java 17+ is installed (with install instructions if missing)
 - ✅ Run a container smoke test to confirm everything works
 
-> A **reboot** is required after WSL2 features are first enabled.
-> Re-run `setup.ps1` after rebooting — it is fully idempotent.
+> A **reboot** may be required after WSL2 features are installed. Re-run `setup.ps1` after rebooting.
+> Docker Desktop auto-starts when the Windows account used for setup signs in. This is
+> application auto-start, not a Windows background service available before sign-in.
 
 #### Manual prerequisites (if you prefer to set up by hand)
 
@@ -223,11 +225,11 @@ enable Docker Desktop 4.34+ host networking under Settings > Resources > Network
 TCP traffic between selected PCs. Build the included CPU/Gloo image from the extracted ZIP:
 
 ```powershell
-docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest
+docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221
 ```
 
-If the package is not public yet, build locally with
-`docker build -t idlegrid-pytorch-cpu:latest -f training-worker/Dockerfile training-worker`.
+The `latest` reference was reported as unavailable. Confirm this pinned digest pulls on each
+selected PC before submitting a DDP run.
 
 The uploaded ZIP contains the DDP-aware Python entrypoint and image data. The entrypoint
 must initialize `torch.distributed`, wrap its model in DDP, use `DistributedSampler`, and

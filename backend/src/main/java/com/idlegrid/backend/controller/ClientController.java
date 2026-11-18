@@ -172,7 +172,7 @@ public class ClientController {
             @RequestParam(defaultValue = "3") int workers,
             @RequestParam(defaultValue = "1") double cpuReq,
             @RequestParam(defaultValue = "2048") int ramReqMb,
-            @RequestParam(defaultValue = "ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest") String image,
+            @RequestParam(defaultValue = "ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221") String image,
             @RequestParam(defaultValue = "model.pt") String outputFile,
             HttpServletRequest request) {
         String username = auth.usernameFor(token);

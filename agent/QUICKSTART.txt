@@ -8,16 +8,17 @@ IdleGrid Agent — Portable Windows ZIP
    master.url=http://192.168.1.25:9090. Save the file and restart run-agent.bat.
    The public JSONBin ID is preconfigured; Agents read it without an API key.
 3. Install Java 17 or newer if it is not already installed.
-4. Double-click run-agent.bat and leave its window open while the agent is running.
+4. In Administrator PowerShell, run `Set-ExecutionPolicy Bypass -Scope Process -Force`, then run `.\setup.ps1`. It installs/enables WSL2 and Docker Desktop, and configures Docker Desktop to start when this Windows account signs in. Reboot and rerun setup if requested.
+5. Double-click run-agent.bat and leave its window open while the agent is running.
 
-Docker Desktop with its WSL2 backend must be installed and running before the agent
-can execute compute jobs. Run setup.ps1 from an Administrator PowerShell to prepare
-WSL2 and Docker on a lab PC. A reboot may be required after enabling WSL2.
+The setup script uses winget to install Docker Desktop when available, falling back to
+Docker's official installer. Java 17+ remains a separate prerequisite. Docker Desktop
+auto-start is enabled at Windows sign-in for the account running setup.
 
 For distributed PyTorch DDP, pull the CPU worker image on every PC:
-  docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest
-If the package is not public yet, build locally:
-  docker build -t idlegrid-pytorch-cpu:latest -f training-worker/Dockerfile training-worker
+  docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221
+If the pinned digest pull fails, do not submit DDP jobs until that image is available or the
+application default is changed; a local :latest tag does not satisfy the pinned digest.
 Enable Docker Desktop host networking (Settings > Resources > Network) and allow TCP
 connections between lab PCs. Docker Desktop 4.34+ is required for host networking.
 

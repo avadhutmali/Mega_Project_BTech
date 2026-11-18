@@ -44,7 +44,7 @@ function App() {
         <div className="section-heading"><p className="eyebrow">Three quick steps</p><h2 id="steps-title">Join the lab grid</h2></div>
         <div className="step-grid">
           <article><span className="step-no">01</span><h3>Download & extract</h3><p>Save the ZIP and extract all files into one folder on the lab PC.</p></article>
-          <article><span className="step-no">02</span><h3>Set up the PC</h3><p>Install Java 17+ and Docker Desktop. Run <code>setup.ps1</code> as Administrator if WSL2 or Docker needs setup.</p></article>
+          <article><span className="step-no">02</span><h3>Set up the PC</h3><p>Install Java 17+, then run <code>setup.ps1</code> in Administrator PowerShell. It installs WSL2 and Docker Desktop and enables Docker auto-start at sign-in.</p></article>
           <article><span className="step-no">03</span><h3>Connect to the Master</h3><p>In the extracted folder, open <code>agent.properties</code> beside <code>run-agent.bat</code>. Set <code>master.url=http://&lt;master-PC-IP&gt;:9090</code>, save, then double-click <code>run-agent.bat</code>.</p></article>
         </div>
       </section>

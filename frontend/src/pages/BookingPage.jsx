@@ -23,7 +23,7 @@ export default function BookingPage() {
   const [releasingJobId, setReleasingJobId] = useState(null)
   const [releaseError, setReleaseError] = useState('')
 
-  const activeJobs = jobs.filter(j => j.status === 'RUNNING' || j.status === 'ASSIGNED')
+  const activeJobs = jobs.filter(j => ['QUEUED', 'RUNNING', 'ASSIGNED'].includes(j.status))
   const onlineNodes = nodes.filter((n) => n.status === 'ONLINE')
 
   const releaseSession = async (job) => {
@@ -31,8 +31,18 @@ export default function BookingPage() {
     setReleasingJobId(job.id)
     try {
       await idleGridApi.cancelJob(job.id)
-      await refresh()
-      return true
+      // A 202 response only means the Master accepted the request. Keep polling
+      // until the Agent confirms that the container has actually stopped.
+      const deadline = Date.now() + 60_000
+      while (Date.now() < deadline) {
+        const current = await idleGridApi.getJobStatus(job.id)
+        if (['CANCELLED', 'DONE', 'FAILED'].includes(current?.status)) {
+          await refresh()
+          return true
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 2000))
+      }
+      throw new Error('The Master accepted the release, but the Agent has not confirmed it after 60 seconds. Check that this PC’s Agent and Docker are running.')
     } catch (e) {
       setReleaseError(e.message || 'Could not release this session')
       await refresh()
@@ -67,7 +77,8 @@ export default function BookingPage() {
           </div>
         )}
         {nodes.map((node) => {
-          const nodeJob = activeJobs.find((j) => j.assignedNode === node.id || j.nodeIp === node.ip)
+          const nodeJob = activeJobs.find((j) => j.assignedNode === node.id
+            || j.targetNodeId === node.id || j.nodeIp === node.ip)
           const sessionJob = nodeJob?.durationMinutes > 0 ? nodeJob : null
           return (
             <NodeCard
@@ -75,7 +86,8 @@ export default function BookingPage() {
               node={node}
               isBooked={Boolean(nodeJob)}
               sessionJob={sessionJob}
-              releasePending={releasingJobId === sessionJob?.id || Boolean(nodeJob?.cancelRequested)}
+              releasePending={releasingJobId === sessionJob?.id}
+              releaseRequested={Boolean(nodeJob?.cancelRequested)}
               onRelease={releaseSession}
               onBook={() => setSelectedNode(node)}
             />
@@ -96,13 +108,13 @@ export default function BookingPage() {
 }
 
 // ─── Node Card ──────────────────────────────────────────────────────────────
-function NodeCard({ node, isBooked, sessionJob, releasePending, onRelease, onBook }) {
+function NodeCard({ node, isBooked, sessionJob, releasePending, releaseRequested, onRelease, onBook }) {
   const online = node.status === 'ONLINE'
   const ramTotalEst = 16384
   const cpuUsedPct  = Math.max(0, Math.min(100, 100 - (node.cpuFree ?? 0)))
   const ramUsedPct  = Math.max(0, Math.min(100, Math.round((ramTotalEst - (node.ramFreeMb ?? 0)) / ramTotalEst * 100)))
 
-  const stateLabel = !online ? 'Offline' : sessionJob ? (releasePending ? 'Releasing…' : 'Release session') : isBooked ? 'Currently in use' : 'Book this PC'
+  const stateLabel = !online ? 'Offline' : sessionJob ? (releasePending ? 'Releasing…' : releaseRequested ? 'Retry release' : 'Release session') : isBooked ? 'Currently in use' : 'Book this PC'
   const isDisabled = !online || (isBooked && !sessionJob) || releasePending
 
   return (
@@ -225,9 +237,11 @@ function BookingModal({ node, onClose, onRelease }) {
   const release = async () => {
     if (!jobId) return
     const previousStep = step
+    if (pollRef.current) clearInterval(pollRef.current)
     setStep('releasing')
     const accepted = await onRelease({ id: jobId })
-    if (!accepted) setStep(previousStep)
+    if (accepted) setStep('released')
+    else setStep(previousStep)
   }
 
   return (

@@ -2,7 +2,7 @@ import { AlertTriangle, Check, Copy, Download, FileArchive, HardDrive, LoaderCir
 import { useEffect, useState } from 'react'
 import { clientApi } from './api'
 
-const DDP_IMAGE = 'ghcr.io/avadhutmali/idlegrid-pytorch-cpu:latest'
+const DDP_IMAGE = 'ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221'
 
 export function ClientTerminal({ token, onSubmitted }) {
   const [command, setCommand] = useState('echo hello from idlegrid')

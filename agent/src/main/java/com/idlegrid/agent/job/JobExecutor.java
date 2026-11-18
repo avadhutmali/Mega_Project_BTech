@@ -85,6 +85,9 @@ public class JobExecutor {
      */
     private final AtomicBoolean             evicted            = new AtomicBoolean(false);
 
+    /** A user release received before Docker returns a container ID is reported from finally. */
+    private final AtomicBoolean             userCancelPending   = new AtomicBoolean(false);
+
     /**
      * The running "docker logs -f" process.
      * Stored here so evict() can destroy it immediately on eviction rather than
@@ -122,13 +125,14 @@ public class JobExecutor {
      * Returns immediately. Only one job runs at a time — subsequent calls
      * while a job is running are ignored with a warning.
      */
-    public void executeAsync(JobModel job) {
+    public synchronized void executeAsync(JobModel job) {
         if (!runningJob.compareAndSet(null, job)) {
             LOG.warning("Already executing job " + runningJob.get().getJobId()
                         + " — ignoring new assignment: " + job.getJobId());
             return;
         }
         evicted.set(false);
+        userCancelPending.set(false);
         Thread t = new Thread(() -> executeBlocking(job), "job-exec-" + job.getJobId());
         t.setDaemon(true);
         t.start();
@@ -141,7 +145,7 @@ public class JobExecutor {
      * {@link com.idlegrid.agent.eviction.EvictionManager}). It is safe to call even if
      * no job is running — it will just log and return.
      */
-    public void evict() {
+    public synchronized void evict() {
         JobModel job = runningJob.get();
         String   cid = runningContainerId.get();
 
@@ -174,13 +178,26 @@ public class JobExecutor {
     }
 
     /** Stops a session after its owner requests release from the dashboard. */
-    public void cancelByUser() {
+    public synchronized void cancelByUser() {
         JobModel job = runningJob.get();
         if (job == null || !evicted.compareAndSet(false, true)) return;
 
         String containerId = runningContainerId.get();
         LOG.info("Releasing job " + job.getJobId() + " at the user's request");
-        if (containerId != null) killContainer(containerId);
+        userCancelPending.set(true);
+        if (containerId == null) {
+            // The job may still be pulling its image or starting Docker. The execution
+            // thread observes evicted and reports only after its cleanup path completes.
+            return;
+        }
+        if (!killContainer(containerId)) {
+            LOG.warning("Could not confirm that container " + containerId
+                    + " stopped; keeping the release pending for another Agent poll");
+            userCancelPending.set(false);
+            evicted.set(false);
+            return;
+        }
+        userCancelPending.set(false);
         reportComplete(job.getJobId(), false, "Session released by user", -3);
         // executeBlocking owns the running slot and clears it from its finally
         // block after Docker has exited and the container has been removed.
@@ -396,6 +413,9 @@ public class JobExecutor {
                     LOG.fine("docker rm " + cid + " failed (may already be gone): " + e.getMessage());
                 }
             }
+            if (userCancelPending.getAndSet(false)) {
+                reportComplete(job.getJobId(), false, "Session released by user", -3);
+            }
             // Always clear running state so the next poll can accept a new job
             runningContainerId.set(null);
             runningJob.set(null);
@@ -465,15 +485,39 @@ public class JobExecutor {
         return workspace;
     }
 
-    private void killContainer(String containerId) {
+    private boolean killContainer(String containerId) {
         try {
             Process kill = new ProcessBuilder("docker", "kill", containerId)
                     .redirectErrorStream(true)
                     .start();
-            kill.waitFor(5, TimeUnit.SECONDS);
-            LOG.info("Killed container: " + containerId);
+            boolean exited = kill.waitFor(10, TimeUnit.SECONDS);
+            if (!exited) {
+                kill.destroyForcibly();
+                LOG.warning("Timed out waiting for docker kill " + containerId);
+            } else if (kill.exitValue() == 0) {
+                LOG.info("Docker stopped container: " + containerId);
+                return true;
+            }
         } catch (Exception e) {
             LOG.warning("docker kill " + containerId + " failed: " + e.getMessage());
+        }
+        // A concurrent natural exit can make `docker kill` return non-zero. Confirm
+        // stopped state explicitly before telling the Master the session is released.
+        try {
+            Process inspect = new ProcessBuilder("docker", "inspect", "--format={{.State.Running}}", containerId)
+                    .redirectErrorStream(true)
+                    .start();
+            if (!inspect.waitFor(5, TimeUnit.SECONDS)) {
+                inspect.destroyForcibly();
+                return false;
+            }
+            if (inspect.exitValue() != 0) return false;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inspect.getInputStream()))) {
+                return "false".equalsIgnoreCase(reader.readLine());
+            }
+        } catch (Exception e) {
+            LOG.warning("Could not verify stopped state for container " + containerId + ": " + e.getMessage());
+            return false;
         }
     }
 

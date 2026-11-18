@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -37,6 +38,7 @@ import java.util.zip.ZipInputStream;
 public class FederatedTrainingService {
     private static final Pattern SAFE_IMAGE = Pattern.compile("[A-Za-z0-9._/:@-]+");
     private static final int UPDATE_WAIT_SECONDS = 120;
+    private static final int MAX_WORKERS = 20;
 
     private final NodeStore nodeStore;
     private final JobStore jobStore;
@@ -168,6 +170,22 @@ public class FederatedTrainingService {
         return Files.isRegularFile(artifact) ? artifact : null;
     }
 
+    public void saveComparison(String runId, String kind, Map<String, Object> metrics) {
+        if (!"fedavg".equals(kind) && !"baseline".equals(kind)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown comparison metric type.");
+        }
+        FederatedTrainingRun run = requireRun(runId);
+        Map<String, Object> recorded = new java.util.HashMap<>(metrics);
+        if ("fedavg".equals(kind)) {
+            Instant firstWorkerStart = run.getWorkerJobs().values().stream().map(jobStore::get)
+                    .filter(java.util.Objects::nonNull).map(Job::getStartedAt).filter(java.util.Objects::nonNull)
+                    .min(Comparator.naturalOrder()).orElse(run.getCreatedAt());
+            recorded.put("distributedWallSeconds", Duration.between(firstWorkerStart, Instant.now()).toMillis() / 1000.0);
+            recorded.put("comparisonDefinition", "Elapsed on the Master from the first worker start through completion of FedAvg aggregation, including worker waiting and checkpoint transfers; excludes queue/setup before a worker starts and the later single-PC baseline.");
+        }
+        run.getComparison().put(kind, Map.copyOf(recorded));
+    }
+
     private FederatedTrainingStatus status(FederatedTrainingRun run) {
         List<FederatedWorkerStatus> workers = new ArrayList<>();
         boolean anyRunning = false, anyFailed = false, allDone = !run.getWorkerJobs().isEmpty();
@@ -217,7 +235,7 @@ public class FederatedTrainingService {
         String base = "/federated-training/runs/" + run.getId();
         return new FederatedTrainingStatus(run.getId(), state, "FedAvg (one aggregation round)", run.getWorkerCount(),
                 workers, "COMPLETED".equals(state) ? base + "/artifact" : null,
-                base + "/report", error, run.getCreatedAt(), started, end, duration);
+                base + "/report", error, run.getCreatedAt(), started, end, duration, Map.copyOf(run.getComparison()));
     }
 
     private Path artifactPathIfPresent(FederatedTrainingRun run) {
@@ -270,6 +288,12 @@ public class FederatedTrainingService {
                         .append(shellQuote(root + "/updates/" + i)).append(" -o update-").append(i).append(".pt; ");
             }
             command.append("python3 fedavg_merge.py --workers ").append(run.getWorkerCount()).append(" --output model.pt; ")
+                    .append("curl --connect-timeout 10 --max-time 30 -fsS -H 'Content-Type: application/json' --data-binary @fedavg_report.json ")
+                    .append(shellQuote(root + "/comparison/fedavg")).append("; ")
+                    .append("python3 fedavg_train.py --rank 0 --world-size 1 --epochs ").append(epochs)
+                    .append(" --checkpoint baseline.pt --baseline; ")
+                    .append("curl --connect-timeout 10 --max-time 30 -fsS -H 'Content-Type: application/json' --data-binary @baseline_report.json ")
+                    .append(shellQuote(root + "/comparison/baseline")).append("; ")
                     .append("curl --connect-timeout 10 --max-time 120 -fsS -F 'file=@model.pt' ")
                     .append(shellQuote(root + "/artifact"));
         }
@@ -279,7 +303,7 @@ public class FederatedTrainingService {
     private void validate(MultipartFile bundle, int workers, double cpu, int ramMb,
                           int epochs, String image, String masterUrl) {
         if (bundle == null || bundle.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Upload a FedAvg ZIP bundle.");
-        if (workers < 2 || workers > 3) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose 2 or 3 workers.");
+        if (workers < 2 || workers > MAX_WORKERS) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose between 2 and " + MAX_WORKERS + " workers.");
         if (!Double.isFinite(cpu) || cpu <= 0 || ramMb < 512) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Each worker needs positive CPU and at least 512 MB RAM.");
         if (epochs < 1 || epochs > 10) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Local epochs must be from 1 to 10.");
         if (image != null && !image.isBlank() && !SAFE_IMAGE.matcher(image).matches()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Docker image name.");

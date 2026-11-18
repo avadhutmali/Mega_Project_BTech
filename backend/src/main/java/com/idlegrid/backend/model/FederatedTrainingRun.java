@@ -2,6 +2,7 @@ package com.idlegrid.backend.model;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.Set;
@@ -18,6 +19,7 @@ public class FederatedTrainingRun {
     private final Set<Integer> uploadedUpdates = new ConcurrentSkipListSet<>();
     private volatile String artifactPath;
     private volatile String error;
+    private final Map<String, Map<String, Object>> comparison = new ConcurrentHashMap<>();
 
     public FederatedTrainingRun() {}
 
@@ -48,4 +50,5 @@ public class FederatedTrainingRun {
     public void setArtifactPath(String artifactPath) { this.artifactPath = artifactPath; }
     public String getError() { return error; }
     public void setError(String error) { this.error = error; }
+    public Map<String, Map<String, Object>> getComparison() { return comparison; }
 }

@@ -2,6 +2,7 @@ package com.idlegrid.backend.dto;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 public record FederatedTrainingStatus(
         String runId,
@@ -15,5 +16,6 @@ public record FederatedTrainingStatus(
         Instant createdAt,
         Instant startedAt,
         Instant completedAt,
-        Long durationMs
+        Long durationMs,
+        Map<String, Map<String, Object>> comparison
 ) {}

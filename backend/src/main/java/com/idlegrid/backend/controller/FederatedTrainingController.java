@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -26,6 +27,7 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 
 /** HTTP API for the coordinator-mediated FedAvg demo. */
 @RestController
@@ -100,6 +102,13 @@ public class FederatedTrainingController {
         } catch (IOException e) {
             return ResponseEntity.internalServerError().body("Could not store the aggregated model.");
         }
+    }
+
+    @PostMapping(value = "/runs/{runId}/comparison/{kind}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> comparison(@PathVariable String runId, @PathVariable String kind,
+                                        @RequestBody Map<String, Object> metrics) {
+        training.saveComparison(runId, kind, metrics);
+        return ResponseEntity.ok(Map.of("stored", kind));
     }
 
     @GetMapping("/runs/{runId}/artifact")

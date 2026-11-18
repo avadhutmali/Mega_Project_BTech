@@ -30,6 +30,7 @@ def main():
 
     torch.save({"state_dict": merged, "classes": updates[0]["classes"], "num_samples": total,
                 "strategy": "FedAvg"}, args.output)
+    baseline_seconds = max(float(item["local_seconds"]) for item in updates)
     summary = {
         "strategy": "FedAvg",
         "workers": [{"rank": item["rank"], "samples": count, "loss": item["loss"],
@@ -39,7 +40,9 @@ def main():
         "weightedLoss": sum(float(item["loss"]) * count for item, count in zip(updates, counts)) / total,
         "weightedAccuracy": sum(float(item["accuracy"]) * count for item, count in zip(updates, counts)) / total,
         "modelFile": Path(args.output).name,
+        "parallelComputeSeconds": baseline_seconds,
     }
+    Path("fedavg_report.json").write_text(json.dumps(summary, sort_keys=True))
     print("FEDAVG_REPORT " + json.dumps(summary, sort_keys=True), flush=True)
 
 

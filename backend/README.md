@@ -301,7 +301,7 @@ Submission multipart fields are `bundle`, `command`, `workers`, `cpuReq`, `ramRe
 
 | Method and route | Caller | Behavior |
 |---|---|---|
-| `POST /federated-training/runs` | Dashboard | Submit FedAvg bundle and reserve 2–3 workers |
+| `POST /federated-training/runs` | Dashboard | Submit FedAvg bundle and reserve 2–20 workers |
 | `GET /federated-training/runs` | Dashboard | List current runs for refresh/history |
 | `GET /federated-training/runs/{runId}` | Dashboard | Return worker statuses, logs, and timing |
 | `GET /federated-training/runs/{runId}/bundle` | Worker container | Download submitted ZIP |
@@ -309,10 +309,11 @@ Submission multipart fields are `bundle`, `command`, `workers`, `cpuReq`, `ramRe
 | `GET /federated-training/runs/{runId}/updates-ready` | Rank-zero container | Wait for every worker update or report a failed worker |
 | `GET /federated-training/runs/{runId}/updates/{rank}` | Rank-zero container | Download each checkpoint for aggregation |
 | `POST /federated-training/runs/{runId}/artifact` | Rank-zero container | Upload the aggregated `model.pt` |
+| `POST /federated-training/runs/{runId}/comparison/{kind}` | Rank-zero container | Store structured FedAvg or single-PC baseline metrics (`kind=fedavg|baseline`) |
 | `GET /federated-training/runs/{runId}/artifact` | Dashboard | Download the aggregate model |
 | `GET /federated-training/runs/{runId}/report` | Dashboard | Download worker logs, metrics, and timing as JSON |
 
-The bundle must contain `fedavg_train.py`, `fedavg_merge.py`, and `data/<class-name>/*`.
+The bundle must contain `fedavg_train.py`, `fedavg_merge.py`, and `data/<class-name>/*`. FedAvg selects 2–20 eligible online PCs; the number 20 is a configurable prototype safety cap. The built-in bundle contains 900 synthetic images and the rank-zero worker measures an equivalent single-PC full-dataset baseline after aggregation. The JSON run report includes both metric sets and total wall-clock duration.
 Each worker selects its data by `--rank` and `--world-size`, starts from the same seed,
 and emits a PyTorch state-dict checkpoint. Rank zero averages floating-point tensors
 weighted by each worker's sample count. Worker containers use bridge networking and contact

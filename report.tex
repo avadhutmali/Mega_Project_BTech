@@ -5,7 +5,16 @@
 \usepackage[utf8]{inputenc}
 \usepackage{array}
 \usepackage{graphicx}
-\newcommand{\safeincludegraphics}[2][]{\IfFileExists{#2}{\includegraphics[#1]{#2}}{\mbox{}}}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric}
+\newcommand{\safeincludegraphics}[2][]{\IfFileExists{#2}{\includegraphics[#1]{#2}}{\fbox{\parbox[c][1.0cm][c]{2.7cm}{\centering\scriptsize College logo file required:\\[2pt]\texttt{#2}}}}}
+\newcommand{\missingfigure}[2]{\fbox{\parbox[c][#1][c]{0.88\linewidth}{\centering\textbf{IMAGE REQUIRED}\\[5pt]#2}}}
+\tikzset{
+  reportbox/.style={draw,rounded corners,align=center,inner sep=6pt,text width=2.6cm,minimum height=0.85cm,font=\small},
+  reportsmall/.style={draw,rounded corners,align=center,inner sep=5pt,text width=2.05cm,minimum height=0.75cm,font=\scriptsize},
+  reportarrow/.style={-{Latex[length=2mm]},thick},
+  reportline/.style={thick}
+}
 \graphicspath{{./}}
 \usepackage{xcolor}
 \usepackage[colorlinks]{hyperref}
@@ -189,7 +198,7 @@ We hereby declare that work presented in this project report titled
 	\Large\textbf{ABSTRACT}
 	\end{center}
 	\noindent
-Campus computer laboratories contain desktop computers whose capacity is often underused, while students may lack hardware for compute-intensive coursework. This project presents IdleGrid, a prototype platform that coordinates spare resources across campus PCs through a central Master service and per-PC Agents. A browser dashboard communicates with the Spring Boot Master, which maintains node and job state, accepts resource-constrained jobs, and assigns work using a first-fit scheduler. Agents report CPU, memory, and disk capacity, poll for assignments, and execute jobs in Docker containers managed through Docker Desktop and WSL2. The system also provides a shared-file workflow in which the Master stores primary file copies and eligible Agents hold best-effort replicas. A separate distributed-training workflow reserves two or three workers and runs a user-supplied PyTorch DistributedDataParallel (DDP) program using the CPU/Gloo backend. The implementation uses Java 17 and Spring Boot for the backend and Agent, and React, Vite, and Tailwind CSS for the dashboard. Node, job, booking, and training-run control records are held in memory; file data and its index are stored on the Master filesystem. The prototype is intended for a trusted campus network and does not include user authentication, durable job state, or checkpoint-based recovery. Its scheduling, resource isolation, file replication, and multi-node training capabilities should be evaluated on the target lab PCs before performance conclusions are made. The report therefore describes the implemented architecture and defines measurable evaluation procedures, while leaving observed performance values to be completed from actual experiments.
+Campus computer laboratories contain PCs whose resources are not always fully used, while students may lack suitable hardware for compute-intensive coursework. IdleGrid is a campus-LAN prototype that coordinates lab PCs through a Spring Boot Master, Windows Agents, Docker Desktop/WSL2, and separate operator and student web interfaces. The Master tracks worker capacity, schedules resource-limited jobs, and stores uploaded files with a primary copy and best-effort worker replicas. Student accounts use file-backed salted password hashes and authenticated sessions; student job, training, and storage history is scoped to the signed-in account. The training area supports two distinct methods: PyTorch DistributedDataParallel (DDP), which requires direct worker connectivity, and coordinator-mediated FedAvg, in which workers upload local model updates to the Master for aggregation. FedAvg supports 2--20 selected workers and includes a 900-image synthetic classification bundle plus a single-PC baseline measurement workflow. The operator dashboard, client application, Master, and Agent are implemented as separate components. Control and session records remain in memory, while uploaded files and metadata are stored on the Master filesystem. This report describes the implemented prototype and its limitations; performance claims are restricted to recorded demonstrations and must be expanded through repeatable lab trials.
 	
 	\pagebreak
 	%\begin{center}
@@ -206,19 +215,15 @@ Campus computer laboratories contain desktop computers whose capacity is often u
 	\setlength{\parskip}{1em}
 	\renewcommand{\baselinestretch}{2.0}
 	
-	\paragraph{List Of Figures}
-	\begin{itemize}
-		\item Figure 1: Conceptual resource mismatch motivating IdleGrid.
-		\item Figure 2: IdleGrid high-level system architecture.
-		\item Figure 3: Job assignment and execution workflow.
-		\item Figure 4: IdleGrid dashboard view.
-		\item Figure 5: Distributed training workflow across worker nodes.
-		\item Figure 6: Performance evaluation chart (populate with measured data).
-	\end{itemize}
+\listoffigures
+\pagebreak
+\listoftables
+\pagebreak
 	\paragraph{Acronyms}
 	\begin{itemize}
 		\item API \hspace{5em}Application Programming Interface
 		\item DDP \hspace{5em}Distributed Data Parallel
+		\item FedAvg \hspace{5em}Federated Averaging
 		\item Gloo \hspace{5em}Collective communications backend for PyTorch
 		\item HTTP \hspace{5em}Hypertext Transfer Protocol
 		\item LAN \hspace{5em}Local Area Network
@@ -234,15 +239,15 @@ Campus laboratories contain computers that are unused at some times or have capa
 
 The challenge is not simply a shortage of processors. Resources are distributed across multiple PCs, each with a separate operating system, current user, network connection, and local workload. A system that makes the PCs available as one pool must observe the nodes, decide whether a request can fit, tell a worker what to run, bound that work, and present reliable status to the requester. It must also account for the fact that a PC can disappear from the network or become active while a job is running. These characteristics make the project a small distributed-systems problem with both software and operational constraints.
 
-IdleGrid has three principal parts: a Spring Boot Master, a Java Agent installed on each participating Windows PC, and a React web dashboard. Agents periodically report node capacity and pull assigned jobs from the Master. The Master queues ordinary jobs and uses a first-fit policy to select an online node with sufficient reported CPU and memory. Each Agent runs its assigned workload in a Docker container with CPU and memory limits. The dashboard provides node monitoring and screens for jobs, bookings, shared storage, and distributed training. A separate public landing page distributes the portable Windows Agent package; it is not the internal dashboard.
+IdleGrid has a Spring Boot Master, Java Agents installed on participating Windows PCs, a React operator dashboard, a separate React student client, and a public Agent download site. Agents report node capacity and pull assigned jobs from the Master. The Master queues ordinary jobs and uses first-fit placement when a node has sufficient reported CPU and memory. Agents run assigned workloads in Docker containers with CPU and memory limits. The operator dashboard provides management views for nodes, jobs, bookings, shared storage, DDP, and FedAvg. The student client provides basic account login and user-scoped jobs, storage, and training history.
 
-The Master is a control plane rather than a worker. It receives browser requests, records node and job state, schedules eligible ordinary jobs, and makes assignments available to Agents. The Agent is the execution component: it reports capacity, polls for work, launches and watches containers, captures output, and informs the Master about completion. This division allows the central service to coordinate multiple computers without requiring the dashboard to connect to every worker directly. The implementation uses a request/poll pattern, so Agents initiate their own assignment requests.
+The Master is a control plane rather than a worker. It receives browser requests, records node and job state, schedules eligible ordinary jobs, and makes assignments available to Agents. The Agent reports capacity, polls for work, launches and watches containers, captures output, and informs the Master about completion. Student requests pass through authenticated client APIs that enforce ownership of jobs and uploaded files. Agents initiate assignment requests using a request/poll pattern.
 
-The implementation also includes a shared-file workflow and a separate CPU-based PyTorch DistributedDataParallel workflow. For shared files, the Master retains a primary copy and queues up to two worker replicas when eligible disk capacity is available. For distributed training, the Master reserves two or three workers and runs one process rank per worker; the user's training code is responsible for data partitioning and gradient synchronization. These features are prototype implementations and have operational dependencies, particularly Windows/WSL2/Docker configuration and direct network connectivity between training workers.
+The implementation also includes a shared-file workflow and two CPU-based distributed-training workflows. The DDP mode reserves two or three workers and runs one rank per worker; user code handles data partitioning and gradient synchronization. The separate FedAvg mode supports 2--20 selected workers and transfers local model updates through the Master. The built-in demo bundle contains 900 synthetic images and, when run, measures a single-PC full-data baseline after aggregation. These features depend on Windows/WSL2/Docker configuration and campus network behavior; only DDP requires direct worker-to-worker training connections.
 
-This project should be understood as a prototype rather than a production cloud. Its node, job, booking, and training-run control records are held in memory, and therefore are lost when the Master restarts. File content and the file index are stored on the Master filesystem. Authentication, user identity, quotas, durable job records, checkpointing, replica repair, and a fairness-aware scheduler are outside the current implementation. These boundaries matter when interpreting both the system design and any results.
+This project should be understood as a prototype rather than a production cloud. Node, job, booking, session, and training-run control records are held in memory and are lost when the Master restarts. Student account hashes and account records are file-backed; student sessions, job ownership, and per-user training history are in memory. File content and its index are stored on the Master filesystem. Production identity integration, durable job records, checkpointing, replica repair, and a fairness-aware scheduler remain future work.
 
-This report describes only behavior represented in the current repository and README documentation. It distinguishes implemented behavior from planned improvements, and it does not claim performance results that have not been measured. The first chapter introduces the problem, motivation, and significance; the following chapters review related work, identify the gap, specify stakeholders and objectives, describe the system design and algorithms, and present a reproducible performance-evaluation plan. Screenshots, logs, measured values, and institutional particulars are intentionally left for the project team to supply.
+This report describes implemented behavior and distinguishes it from future work. It includes one recorded FedAvg demonstration result, but does not infer general performance from that single run. The following chapters review related work, identify the gap, specify stakeholders and objectives, describe the system design and algorithms, and present a reproducible evaluation plan. The remaining screenshots, hardware details, repeat measurements, and signatures are identified for the project team to provide.
 
 	\subsection{Problem Statement}
 
@@ -250,13 +255,28 @@ Campus computer laboratories are shared environments rather than dedicated datac
 
 In the current prototype, a central Master maintains node and job records in memory. Agents send heartbeats, and a scheduler assigns a queued job to the first online node whose reported free CPU and memory meet the request. An Agent pulls the assignment and starts a resource-capped container. This centralized first-fit method is intentionally simpler than fairness-aware or datacenter-scale schedulers; it is appropriate for demonstrating a small trusted lab prototype but does not guarantee fairness or globally optimal placement. Figure~\ref{fig:problem-context} illustrates the resource mismatch addressed by the project.
 
-The system has to make decisions from periodically reported data. A heartbeat gives the Master a snapshot, not a guarantee that the reported free resources will remain available until a container starts. Users may submit requests that exceed the capacity of every currently online worker; these should remain queued rather than being silently reduced. A worker can lose its Master connection, a container can exit unsuccessfully, or a DDP peer can be unreachable even when the Agent can contact the Master. These are normal failure conditions in a distributed environment and need to be visible to the user.
+The system has to make decisions from periodically reported data. A heartbeat gives the Master a snapshot, not a guarantee that reported free resources will remain available until a container starts. Users may submit requests that exceed capacity; these should remain queued or be rejected according to the workflow. A worker can lose its Master connection, a container can exit unsuccessfully, or a DDP peer can be unreachable even when an Agent can contact the Master. FedAvg avoids peer networking, but still depends on each worker maintaining HTTP access to the Master.
 
-There is also a machine-ownership constraint. A lab PC may be used for teaching or administrative work while a background computation is running. Container CPU and memory caps limit the resources allocated to an individual container, but they do not prove that the owner will experience no slowdown. IdleGrid additionally detects user activity and can evict a running job on a transition from idle to active. That is a coarse protection mechanism: it ends the container and reports failure, and it does not preserve progress. The scheduler does not currently enforce an idle-only eligibility rule based on the Agent's activity state.
+There is also a machine-ownership constraint. A lab PC may be used for teaching or administrative work while a background computation is running. Container CPU and memory caps limit the resources allocated to an individual container, but do not prove that the owner will experience no slowdown. The Agent can detect a return to activity and stop an active workload; this is a coarse protection mechanism because it ends the container and does not preserve progress. The report therefore treats foreground responsiveness as something to measure rather than a guaranteed outcome.
 
 \begin{figure}[htbp]
 \centering
-\safeincludegraphics[width=0.88\linewidth,height=6cm,keepaspectratio]{img1.png}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \draw[thick,rounded corners,fill=blue!5] (0,0) rectangle (5.0,2.6);
+  \node[align=center,text width=4.3cm] at (2.5,2.25) {Three separate lab PCs};
+  \foreach \x/\lab/\cpu in {0.45/PC 1/idle CPU,1.95/PC 2/idle CPU,3.45/PC 3/idle CPU}{
+    \draw[rounded corners] (\x,0.65) rectangle +(1.1,1.15);
+    \node[align=center,font=\scriptsize] at (\x+0.55,1.35) {\lab};
+    \node[align=center,font=\scriptsize] at (\x+0.55,0.95) {\cpu};
+  }
+  \draw[reportarrow] (5.3,1.3) -- (6.3,1.3);
+  \draw[thick,rounded corners,fill=green!8] (6.5,0) rectangle (11.5,2.6);
+  \node[align=center,text width=4.3cm] at (9,2.15) {IdleGrid makes capacity visible as one managed pool};
+  \foreach \x/\lab in {6.9/CPU,8.4/RAM,9.9/Disk}{
+    \draw[rounded corners] (\x,0.65) rectangle +(1.2,0.9);
+    \node[align=center,font=\small] at (\x+0.6,1.1) {\lab};
+  }
+\end{tikzpicture}
 \caption{Conceptual resource mismatch motivating IdleGrid.}
 \label{fig:problem-context}
 \end{figure}
@@ -270,21 +290,21 @@ Students who do not own high-performance computers can face barriers when comple
 
 The project is relevant to students, teaching staff, and lab administrators. Students need a simple way to view availability and submit jobs without learning a separate remote-execution interface for every PC. Teaching staff may benefit from a repeatable environment for demonstrations and small experiments, particularly where a lab exercise involves distributed execution. Administrators need visibility into participating nodes, bounded workloads, and clear operational requirements before approving any installation. The public Agent download page can simplify distribution, but it does not replace installation review, endpoint policy, or administrator approval.
 
-IdleGrid is also a practical learning exercise in distributed systems: it combines heartbeats, scheduling, container execution, file replication, web APIs, failure detection, and distributed training. Each feature provides an opportunity to study a distinct systems concern. Heartbeats make liveness observable; polling limits the need for the Master to initiate worker connections; first-fit gives a simple placement baseline; containers apply per-workload limits; and the DDP extension demonstrates that placement alone is not enough when workers must communicate directly.
+IdleGrid is also a practical learning exercise in distributed systems: it combines heartbeats, scheduling, container execution, file replication, web APIs, failure detection, student account boundaries, DDP, and FedAvg. Heartbeats make liveness observable; polling limits the need for the Master to initiate worker connections; first-fit gives a simple placement baseline; containers apply per-workload limits; DDP demonstrates direct communication requirements; and FedAvg demonstrates coordinator-mediated model aggregation.
 
-The prototype is not a production cloud service. In particular, it currently has no authentication or authorization, and therefore must remain on a trusted network and should not be exposed publicly. The dashboard and API do not establish user ownership of jobs or files, and anyone possessing a file key can download the corresponding file. These are important design limitations, not details that can be ignored in a campus deployment. Its value at this stage is demonstrating an end-to-end design and enabling controlled measurement on a small campus deployment after administrative approval.
+The student client provides basic account login and restricts client job, training-history, and uploaded-file views to the signed-in account. This is a prototype identity boundary, not a production identity service. The operator dashboard and most Master APIs remain suitable only for a trusted, controlled network; storage access keys also grant access to their corresponding files. These constraints should be considered before any campus deployment beyond an approved demonstration.
 
     \subsection{Significance of the problem}
 	
 IdleGrid uses a centralized control plane and lightweight worker Agents. The Master is the single point through which the dashboard and Agents coordinate. This design provides a clear source of node and job status and simplifies a small prototype compared with a decentralized membership and scheduling protocol. Its first-fit scheduler is easy to inspect and demonstrate, although it is not intended to provide fairness, optimal packing, or production-scale throughput.
 
-The implementation combines ordinary batch jobs with shared-file handling and a distinct PyTorch DDP workflow. Docker CPU and memory limits bound each ordinary container, while Agent activity detection and job eviction provide a basic response when a user returns after an idle period. This behavior is not a guarantee of zero user impact: the Master currently places jobs using online status and reported capacity, and an eviction is a failure rather than a checkpoint-and-resume operation. The project is therefore best described as a resource-capped lab-compute prototype with activity-aware worker behavior, not as a fully elastic co-tenant scheduler.
+The implementation combines ordinary batch jobs with shared-file handling and two distinct training workflows. DDP synchronizes gradients directly among workers and requires peer connectivity. FedAvg lets workers train locally and exchange model updates through the Master, so workers do not need direct connections to each other. Docker CPU and memory limits bound each ordinary container, while Agent activity detection and job eviction provide a basic response when a user returns after an idle period. Eviction is a failure rather than a checkpoint-and-resume operation. The project is a resource-capped lab-compute prototype, not a fully elastic co-tenant scheduler.
 
-The significance of the work is the integration of these capabilities into a single campus-oriented prototype and the opportunity to measure them on real lab equipment. The design is composed of a browser interface, central coordination service, worker-side execution agents, and container runtime, so the project can be discussed through both architectural and empirical perspectives. Unlike an isolated scheduler exercise, the implementation includes complete request paths from dashboard submission to worker execution and returned status, together with file-transfer and DDP workflows.
+The significance of the work is the integration of these capabilities into a single campus-oriented prototype and the opportunity to measure them on real lab equipment. The design combines separate operator and student interfaces, a central coordination service, worker-side Agents, and a container runtime. It includes complete request paths from authenticated student submission to worker execution and returned status, file storage, DDP, and coordinator-mediated FedAvg.
 
 The principal engineering contribution is integration for a constrained environment: Windows PCs using Docker Desktop and WSL2, a campus LAN, a small node count, and a single central Master. The use of a simple first-fit scheduler keeps placement behavior understandable and supports a baseline implementation against which a future fairness-aware strategy could be evaluated. The use of Docker resource limits gives a concrete mechanism for restricting per-job CPU and memory, while the Agent's activity detector supplies a separate return-to-use response. These mechanisms address different aspects of resource management and should not be conflated: one limits container allocation, while the other can terminate a job after renewed user activity.
 
-The project should be evaluated by measuring rather than assuming its benefits. Evaluation should vary the number of online workers, job CPU and memory requests, workload duration, and worker availability. Relevant metrics include queue-to-assignment delay, job makespan, successful completion ratio, throughput, resource utilization, storage replica completion, and DDP run/artifact success. Owner impact should be measured through a controlled comparison of responsiveness with and without a capped workload, using the same machine and comparable foreground tasks. Repeated trials are required because startup time, image availability, network transfer, background system load, and thermal conditions can affect measurements.
+The project should be evaluated by measuring rather than assuming its benefits. Evaluation should vary worker count, job CPU and memory requests, workload duration, and worker availability. Metrics include queue-to-assignment delay, job makespan, completion ratio, throughput, utilization, replica completion, DDP artifact success, and FedAvg comparison against a single-PC baseline. Owner impact should be measured using a controlled foreground task. Repeated trials are required because startup, image availability, transfer, background load, and thermal conditions affect measurements.
 
 No numerical results are included here because the project documentation does not provide recorded measurements. Accordingly, the report does not claim an improvement over cloud services, existing schedulers, idle-only systems, or a baseline implementation. The Results and Analysis section contains a test matrix and data-collection structure that must be completed from actual runs. Once measurements are collected, they can establish whether the prototype meets its local functional goals and under which test conditions its resource-pooling approach is useful.
 
@@ -299,7 +319,7 @@ Cluster schedulers address placement and resource allocation at a larger scale. 
 
 Container-based co-location work, including Bubble-Up and Heracles, studies the interference that occurs when workloads share hardware and the mechanisms used to control it \cite{bubbleup,heracles}. IdleGrid applies per-container CPU and memory limits and records Windows idle/active transitions, but its implementation does not include feedback-driven interference control. An Agent may evict a running job after a return-to-active transition, and the job is reported as failed rather than resumed. Thus the current design is a practical baseline for experimentation, not a demonstration that user experience is unaffected.
 
-PyTorch DDP supplies a data-parallel training model in which separate processes synchronize gradients; a distributed sampler can assign different training examples to each rank \cite{pytorchddp}. IdleGrid's training workflow orchestrates the placement and launch of one worker process per selected PC, but the submitted program must implement the DDP logic. The system distributes the same uploaded bundle to workers; it does not split data files or automatically convert arbitrary Python scripts into distributed programs.
+PyTorch DDP supplies a data-parallel training model in which separate processes synchronize gradients; a distributed sampler can assign different training examples to each rank \cite{pytorchddp}. IdleGrid includes this DDP orchestration path and a separate coordinator-mediated FedAvg path. In the FedAvg demo, each worker selects its own deterministic shard from a common 900-image synthetic dataset, performs local training, and uploads a model update to the Master. FedAvg avoids direct worker-to-worker networking but is a single-round prototype, not a general-purpose distributed training framework.
 
 The systems and concepts reviewed above differ in target scale and assumptions. Condor and BOINC demonstrate resource harvesting and volunteer participation, but their history and operating models do not directly prescribe how a department should deploy a Windows Agent, configure Docker Desktop, and expose a browser dashboard on a private campus LAN. Borg and DRF address larger shared clusters and multi-resource allocation; they provide useful comparison points but would add complexity beyond the current project's first-fit scope. Co-location studies focus on measuring and controlling interference, which makes owner responsiveness an important experiment rather than something that can be inferred from resource caps alone.
 
@@ -326,20 +346,20 @@ PyTorch DDP \cite{pytorchddp} & Synchronous data-parallel model training & Suppl
 \end{tabular}
 \end{table}
 
-\textbf{Identified gap:} the referenced systems provide important foundations, but do not by themselves document an integrated, small-scale campus prototype combining a web dashboard, Windows Agents, Docker/WSL2 execution, first-fit placement, shared file replicas, and an optional multi-node CPU training workflow. IdleGrid's contribution is this integration and its concrete evaluation opportunity. It is not claimed to outperform Condor, BOINC, or datacenter schedulers; the gap is addressed through a bounded implementation whose limitations can be tested and reported transparently.
+\textbf{Identified gap:} the referenced systems provide important foundations, but do not by themselves document an integrated, small-scale campus prototype combining separate operator and student interfaces, Windows Agents, Docker/WSL2 execution, first-fit placement, shared file replicas, DDP, and coordinator-mediated FedAvg. IdleGrid's contribution is this integration and its concrete evaluation opportunity. It is not claimed to outperform Condor, BOINC, or datacenter schedulers.
 
-\textbf{Positioning and research questions.} The project can be evaluated through questions that match the actual implementation: (1) Can a node heartbeat and job request pass through the full Master--Agent--container lifecycle? (2) How do queue delay and makespan change as the worker count and resource request vary? (3) Under what conditions does a file replica task complete on eligible worker disks? (4) Can the DDP example complete across two or three reachable PCs and produce the requested artifact? (5) What observable change in foreground responsiveness occurs when a capped job runs, and what happens when the Agent detects a return from idle? These questions avoid claiming novelty in the first-fit algorithm itself.
+\textbf{Positioning and research questions.} The project can be evaluated through questions that match the implementation: (1) Can a node heartbeat and job request pass through the Master--Agent--container lifecycle? (2) How do queue delay and makespan change with worker count and resource request? (3) Under what conditions do worker file replicas complete? (4) Can DDP complete when peer traffic is permitted? (5) How does coordinator-mediated FedAvg compare with the same single-PC workload as worker count changes? (6) What observable change in foreground responsiveness occurs under a capped workload? These questions avoid claiming novelty in first-fit scheduling itself.
     \pagebreak
     \section{Customer Details and Use Cases}
 The primary customers are students who need temporary compute resources for coursework and small experiments but do not have suitable local hardware. Secondary stakeholders are instructors who demonstrate distributed or containerized workloads and laboratory administrators responsible for approving software and network access. The current prototype assumes a trusted campus LAN and administrator approval for installing Java, Docker Desktop, WSL2, and the Agent.
 
-The stakeholder roles have different requirements. A student needs understandable resource choices, clear job status, and access to output without knowledge of the worker's local configuration. An instructor needs a reproducible demonstration and a way to determine whether a job actually completed. A laboratory administrator needs to understand installation privileges, ports, Docker/WSL2 configuration, resource ceilings, and the effect of worker shutdown. A developer/operator needs logs and predictable APIs for diagnosing discovery, scheduling, and execution problems. The current prototype offers only partial support for these operational needs; for example, it provides logs and status screens but not user-specific access control or an administrator policy console.
+The stakeholder roles have different requirements. A student needs understandable resource choices, clear job status, and access to output without knowledge of the worker's local configuration. The separate client includes basic login and user-scoped job, training, and storage history. An instructor needs a reproducible demonstration and a way to determine whether a job actually completed. A laboratory administrator needs to understand installation privileges, ports, Docker/WSL2 configuration, resource ceilings, and the effect of worker shutdown. The prototype has no production-grade administrator policy console or identity provider.
 
 \textbf{Use case 1 -- Submit a batch job:} A student opens the dashboard, selects a command and CPU/RAM request, and submits it. The Master queues and attempts to place the job. The selected Agent polls for an assignment, starts a Docker container, captures its output, and reports completion. The dashboard displays job status and final output; it is not a live interactive terminal.
 
-\textbf{Use case 2 -- Store and retrieve a file:} A student uploads a file in the Storage page. The Master stores the primary copy and returns a random access key. Eligible online Agents may store up to two replicas. A user with the key can download the file.
+\textbf{Use case 2 -- Store and retrieve a file:} A signed-in student uploads a file in the client Storage page. The Master stores the primary copy, associates the record with the student account, and returns a file access key. Eligible online Agents may store up to two replicas. The client lists and downloads only files owned by the signed-in student.
 
-\textbf{Use case 3 -- Run distributed training:} A user uploads a ZIP containing a DDP-aware Python entry point and data, selects two or three workers, and submits a command. The Master reserves eligible workers and schedules one rank per node. The program performs sample partitioning and gradient synchronization; rank zero uploads the requested model artifact.
+\textbf{Use case 3 -- Run distributed training:} An operator can choose either DDP or coordinator-mediated FedAvg. DDP launches ranks on two or three workers and needs direct worker connectivity. FedAvg distributes data slices to 2--20 workers, receives local checkpoints through the Master, and combines them with sample-weighted averaging. The FedAvg demo also runs a full-data single-PC baseline on rank zero and records both timing and model metrics.
 
 \textbf{Use case 4 -- Monitor lab capacity:} A lab administrator or instructor views node status and reported CPU, memory, and disk capacity in the dashboard and checks whether Agents are reaching the Master.
 
@@ -347,14 +367,15 @@ The stakeholder roles have different requirements. A student needs understandabl
 
 \textbf{Use case 6 -- Recover from unavailable capacity:} If no online worker meets the CPU/RAM request, an ordinary job remains queued. The user can inspect its status while the scheduler retries on later passes. The prototype does not guarantee a wait time or fairness among users. If a node becomes stale, the Master marks it offline after the heartbeat timeout and applies the implemented requeue behavior for affected ordinary jobs; DDP worker loss fails the coordinated run.
 
-\textbf{Use-case boundary:} This report describes authorized prototype use on a trusted campus network. It does not specify anonymous public job submission, multi-tenant identity, billing, quotas, arbitrary network exposure, or guaranteed long-running services. Such use cases would require security and operations features not present in the implementation.
+\textbf{Use-case boundary:} This report describes authorized prototype use on a trusted campus network. Student accounts provide basic per-user separation for client jobs, training history, and uploaded files; this is not a production identity, billing, quota, or enterprise authorization system. Public API exposure and guaranteed long-running services are outside scope.
 	\pagebreak
 	\section{Project Objectives}
     \begin{enumerate}
       \item To design and implement a centralized platform for monitoring compute resources on campus laboratory PCs.
       \item To enable submission, first-fit scheduling, and Docker-based execution of CPU- and memory-constrained jobs.
       \item To provide a shared-file workflow with a Master-stored primary copy and best-effort worker replicas.
-      \item To implement a dashboard workflow for coordinating CPU-based PyTorch DDP runs across two or three workers.
+  \item To provide a separate authenticated student client with user-scoped jobs, storage, and training history.
+  \item To implement CPU-based DDP and coordinator-mediated FedAvg training workflows, including a single-PC comparison report for FedAvg.
       \item To define and conduct controlled measurements of job execution, resource use, storage replication, and worker availability.
     \end{enumerate}
 	\pagebreak	
@@ -363,37 +384,50 @@ The problem is to accept a compute request and place it on an eligible campus PC
 
 	\subsection{Problem Definition}
 
-Given a set of worker nodes \(N\), each with a reported online state and free CPU and memory, and a user job request \(J=(c_j,m_j,\mathrm{command},\mathrm{image})\), the Master should select an eligible node \(n\in N\) whose reported available CPU and memory satisfy \(c_n\ge c_j\) and \(m_n\ge m_j\), or leave the job queued if no such node exists. The expected outputs are an updated job state, an assignment for the selected Agent to pull, and a completion result reported after container execution. For a DDP request, the inputs include a validated training bundle, worker count, resource requests, container image, and output filename; the expected result is coordinated execution on the selected workers and, on success, a downloadable rank-zero artifact.
+Given a set of worker nodes \(N\), each with a reported online state and free CPU and memory, and a user job request \(J=(c_j,m_j,\mathrm{command},\mathrm{image})\), the Master selects an eligible node whose reported capacity satisfies the request, or leaves the job queued. For DDP, the inputs include a validated training bundle, worker count, resource requests, image, and output filename; success requires the program to synchronize ranks over direct worker connections and upload the rank-zero artifact. For FedAvg, workers train local data shards and upload model updates to the Master; rank zero computes a sample-weighted aggregate, then measures a single-PC run on the full dataset for comparison.
 
 The ordinary-workload input can include an optional target node and an optional duration for a time-limited SSH-style container session. A request also depends on the worker having access to the selected container image and a usable workspace. The platform does not accept a generic high-level program and infer its parallelism: for distributed training, the uploaded ZIP must contain a compatible Python entry point and the command supplied by the user must be valid in the training container. The run request specifies a worker count of two or three and a requested amount of CPU and memory for each selected worker.
 
-The output is not limited to whether the command started. The Master exposes the current state of a job or run; the Agent returns the container result and captured output when ordinary execution completes; and the DDP page provides per-rank status and the final artifact when rank zero successfully uploads it. For storage, the output of an upload is metadata and an access key, while replica acknowledgements are tracked separately from the durable Master copy. This distinction is important: an upload completing to the Master does not by itself prove that all worker replicas have been created.
+The output is not limited to whether the command started. The Master exposes job and training states; the Agent returns the container result and captured output when ordinary execution completes; training reports include per-worker state, metrics, and timing. DDP produces its rank-zero model artifact; FedAvg provides an aggregated model and a structured one-PC comparison. Student client storage lists only the signed-in student's uploads, while operator shared storage uses the operator API. Replica acknowledgements remain distinct from the Master primary copy.
 
-The objective is to demonstrate end-to-end resource monitoring, placement, execution, and status reporting on a small campus LAN. Constraints include Windows worker PCs, Java 17+, Docker Desktop with WSL2, network access to the Master, and direct inter-worker TCP reachability for DDP. The prototype's node/job/booking/run state is in memory; capacity reports may become stale; first-fit is not a fairness policy; ordinary job output is available after completion rather than as a live terminal; and the system has no authentication. These assumptions make it unsuitable for public or untrusted deployment without further engineering.
+The objective is to demonstrate end-to-end resource monitoring, placement, execution, and status reporting on a campus LAN. Constraints include Windows worker PCs, Java 17+, Docker Desktop with WSL2, and network access to the Master. Direct worker-to-worker TCP connectivity is required for DDP but not for FedAvg. Node, job, booking, session, and training-run state is in memory; student account hashes are file-backed; student file bytes and metadata are stored on the Master filesystem. Capacity reports may become stale, first-fit is not a fairness policy, and ordinary job output is available after completion rather than as a live terminal. The prototype should remain on an approved trusted network.
 
 	\subsection{Proposed Idea/System}
-The core idea is to turn existing lab PCs into visible worker nodes without making the browser communicate directly with each PC. The dashboard submits requests to the Master, the Master tracks worker heartbeats and job state, and each Agent pulls its own assignment. Docker enforces per-job CPU and memory limits at container launch. This separation simplifies the control path and allows Agents to operate behind the central API.
+The core idea is to turn existing lab PCs into visible worker nodes without making the browser communicate directly with each PC. The operator dashboard and student client submit requests to the Master, the Master tracks worker heartbeats and job state, and each Agent pulls its own assignment. Docker enforces per-job CPU and memory limits at container launch. Student records are scoped to authenticated accounts in the client workflow.
 
-The first-fit scheduler walks online nodes and assigns a queued job to the first node with sufficient reported CPU and memory after accounting for active reservations. Heartbeats older than 15 seconds cause a node to be marked offline. Jobs that are affected by node loss may be requeued according to the Master workflow; no checkpoint is created. For shared files, the Master stores the authoritative file and metadata and queues replica tasks for eligible workers. DDP placement is a separate operation: two or three eligible workers are reserved together and each runs a rank using host networking. The novelty claimed here is the integrated, lab-focused prototype and its workflow, not a new scheduling algorithm.
+The first-fit scheduler walks online nodes and assigns a queued job to the first node with sufficient reported CPU and memory after accounting for active reservations. Heartbeats older than the configured timeout cause a node to be marked offline. Jobs affected by node loss may be requeued according to the Master workflow; no checkpoint is created. For shared files, the Master stores the authoritative file and metadata and queues replica tasks for eligible workers. DDP placement reserves a complete two- or three-worker group and launches synchronized ranks. FedAvg selects 2--20 eligible workers, trains local data partitions, and has rank zero average worker checkpoints after retrieving them through HTTP. The novelty claimed here is the integrated, lab-focused prototype and its workflow, not a new scheduling algorithm.
     
 	\subsection{System Architecture}
-IdleGrid uses a centralized architecture. The React dashboard calls the Spring Boot Master over HTTP. The Master maintains in-memory node, job, booking, and training-run state, stores primary files and an index on its filesystem, and runs scheduling and placement logic. Java Agents on Windows PCs report heartbeats and pull jobs or storage tasks. Assigned jobs run in Docker Desktop containers through WSL2. For DDP, selected worker containers also need direct peer-to-peer TCP connectivity. Figure~\ref{fig:architecture} shows these boundaries; the implementation description follows the project technical guide \cite{idlegridguide}. The centralized Master and separate Agents are the principal integration choices of this prototype.
+IdleGrid uses a centralized architecture. The operator dashboard and authenticated student client call the Spring Boot Master over HTTP. The Master maintains in-memory node and job control state, account sessions, and run histories; it stores primary files and a JSON metadata index on its filesystem. Java Agents on Windows PCs report heartbeats and pull jobs or storage tasks. Assigned jobs run in Docker Desktop containers through WSL2. DDP workers require direct peer-to-peer connectivity, while FedAvg workers communicate with the Master to upload and download checkpoints. Figure~\ref{fig:architecture} shows these paths; the implementation description follows the project technical guide \cite{idlegridguide}.
 
-\textbf{Dashboard.} The internal dashboard is a React application built with Vite and Tailwind CSS. Its pages include an overview, job submission and status, a terminal-style batch command interface, resource booking, shared storage, and distributed training. Browser requests go to the Master API; the dashboard is not an execution agent and does not directly invoke Docker on a worker. In development, the Vite server proxies API requests to the configured backend. The public download site is a separate application and serves the portable Agent ZIP.
+\textbf{Web applications.} IdleGrid has an operator dashboard and a separate React student client. The operator interface includes node monitoring, job management, storage, bookings, DDP, and coordinator-mediated FedAvg. The student client has basic login and student-facing capacity, job submission, training history, and storage views; the backend filters the student's jobs and uploaded files by the authenticated account. The public download site is a third, separate application that serves the portable Agent ZIP. Browser applications call the Master API and do not run Docker directly on workers.
 
-\textbf{Master service.} The Master is implemented in Java with Spring Boot. Controllers expose node, job, booking, storage, and distributed-training endpoints. The scheduler evaluates ordinary queued jobs and reserves a group of workers for DDP. In-memory stores hold node/job/booking/run control data. File bytes and an index are stored under the configured filesystem directory, while training bundles and artifacts are stored under the configured training directory. The Master also advertises its LAN endpoint through the configured rendezvous/discovery mechanisms. The Master is a single coordination point; its failure interrupts new API operations and its in-memory records are not recovered on restart.
+\textbf{Master service.} The Master is implemented in Java with Spring Boot. Controllers expose node, job, booking, storage, client-authentication, DDP, and FedAvg endpoints. The scheduler evaluates ordinary queued jobs and reserves worker groups for training. Student account password hashes are held in a local account file; session, job-ownership, and training-history state is in memory. File bytes and a JSON index are stored under the configured filesystem directory, while training bundles and artifacts are stored under the configured training directory. The Master advertises its LAN endpoint through rendezvous and local discovery mechanisms. It remains a single coordination point, and in-memory state is not recovered after restart.
 
 \textbf{Worker Agent.} A Java background process runs on each participating Windows PC. Scheduled tasks send heartbeats, check Windows input inactivity, poll for job assignments, monitor running containers, and request storage replication tasks. The Agent keeps a stable node identifier in a local file unless explicitly configured otherwise. It launches jobs using Docker CLI commands, captures session output in local logs, and reports running/completed status to the Master. The Agent is packaged as a portable ZIP with a launcher, configuration, and setup helper; Java 17+ and Docker Desktop/WSL2 are runtime requirements.
 
-\textbf{Container runtime and data paths.} Ordinary jobs run in Docker containers with CPU and memory limits and a per-job workspace mounted at \texttt{/workspace}. Ordinary containers use Docker's default bridge network and may publish image-exposed ports. DDP containers request host networking because rank processes must communicate directly. The worker runtime is not a native Windows container environment: Docker Desktop uses WSL2. This deployment makes the platform dependent on installed versions, Docker configuration, firewall policy, and campus network topology.
+\textbf{Container runtime and data paths.} Ordinary jobs run in Docker containers with CPU and memory limits and a per-job workspace mounted at \texttt{/workspace}. Ordinary and FedAvg containers use Docker bridge networking; FedAvg workers communicate only with the Master. DDP containers use the configured host networking because rank processes must communicate directly. Docker Desktop uses WSL2 on the Windows worker. This deployment depends on installed versions, Docker configuration, firewall policy, and campus network topology.
 
 \textbf{Storage component.} The Master maintains a canonical file copy and JSON metadata index. After an upload, it may queue up to two replica tasks on online Agents with available disk. Agents poll, download the source bytes from the Master, write local copies, and acknowledge completion. This is not a distributed object store: the repository does not implement MinIO, S3, erasure coding, user buckets, or a repair/rebalance service. DDP bundles and output artifacts follow their own training-run paths and have separate validation and size constraints.
 
-\textbf{External communication and ports.} The HTTP Master API uses TCP port 9090 by default. Local Agent discovery uses UDP port 9091. The default DDP rendezvous uses TCP port 29500, with additional peer connections depending on runtime behavior. Agents must reach the Master; multi-node DDP also requires direct worker-to-worker connectivity. A successful heartbeat therefore confirms only one network path and does not prove that the DDP communication path is available.
+\textbf{External communication and ports.} The HTTP Master API uses TCP port 9090 by default. Local Agent discovery uses UDP port 9091. DDP uses its configured rendezvous port (29500 by default) and additional peer connections. Agents and FedAvg workers must reach the Master; DDP additionally requires direct worker-to-worker connectivity. A successful heartbeat therefore does not prove that DDP peer traffic is available.
 
 \begin{figure}[htbp]
 \centering
-\safeincludegraphics[width=0.92\linewidth,height=7cm,keepaspectratio]{img2.png}
+\begin{tikzpicture}[node distance=1.25cm and 1.0cm]
+  \node[reportbox,text width=2.5cm] (web) {Operator dashboard\\Student client\\Public Agent download};
+  \node[reportbox,text width=3.0cm,right=of web] (master) {Spring Boot Master\\REST API, auth, scheduler\\in-memory control state};
+  \node[reportbox,text width=2.6cm,right=of master,yshift=1.05cm] (agent) {Windows Agent\\heartbeat, polling\\Docker / WSL2};
+  \node[reportbox,text width=2.6cm,right=of master,yshift=-1.05cm] (files) {Master filesystem\\primary files, JSON index\\training artifacts};
+  \node[reportbox,text width=2.7cm,right=of agent] (container) {Worker containers\\batch jobs / local training};
+  \draw[reportarrow] (web) -- node[above,font=\scriptsize,align=center]{HTTP\\student/operator APIs} (master);
+  \draw[reportarrow] (master) -- node[above,font=\scriptsize,align=center]{heartbeat, assignment,\\storage tasks} (agent);
+  \draw[reportarrow] (agent) -- node[above,font=\scriptsize,align=center]{launch / monitor} (container);
+  \draw[reportarrow] (master) -- node[below,font=\scriptsize,align=center]{file and artifact\\read/write} (files);
+  \draw[reportarrow] (container.south) to[bend right=25] node[below,font=\scriptsize]{FedAvg updates via Master} (master.south east);
+  \node[below=0.55cm of container,align=center,font=\scriptsize,text width=3cm] (peer) {DDP only: direct worker-to-worker communication};
+  \draw[reportline,dashed] (agent.south) -- (peer.west);
+\end{tikzpicture}
 \caption{High-level architecture of the IdleGrid prototype.}
 \label{fig:architecture}
 \end{figure}
@@ -408,9 +442,11 @@ The design follows the repository's implemented API boundaries and operating ass
   \item A user shall be able to submit a job with a command and CPU/memory request and inspect its state and completion output.
   \item An Agent shall pull an assignment, start a resource-limited Docker container, and report job completion or failure.
   \item A user shall be able to upload and download shared files using a generated access key; eligible worker nodes may store replicas.
-  \item A user shall be able to submit and inspect a DDP run on two or three workers and retrieve its artifact when produced.
+  \item A student shall authenticate through the client and see only that account's jobs, training history, and uploaded files.
+  \item An operator shall be able to submit and inspect a DDP run on two or three workers and retrieve its artifact when produced.
+  \item An operator shall be able to submit coordinator-mediated FedAvg on 2--20 eligible workers, compare it with a single-PC baseline, and download the run report and aggregate model.
 \end{enumerate}
-\textbf{Non-functional requirements and constraints:} Java 17 or later is required for the backend and Agent; worker PCs require Windows, Docker Desktop, and WSL2. The dashboard is browser-based. Agents must reach the Master on the campus network; DDP additionally requires worker-to-worker TCP connectivity and compatible Docker host networking. Capacity values are periodic estimates. The prototype has no authentication, durable control database, or checkpoint-based restart and should be restricted to a trusted network.
+\textbf{Non-functional requirements and constraints:} Java 17 or later is required for the backend and Agent; worker PCs require Windows, Docker Desktop, and WSL2. The applications are browser-based. Agents and FedAvg containers must reach the Master; DDP additionally requires worker-to-worker TCP connectivity and compatible networking. Capacity values are periodic estimates. Client sessions and job/run ownership are in memory and there is no checkpoint-based restart; the system should be restricted to an approved trusted network.
 
 Table~\ref{tab:requirements} makes the requirements traceable to observable behavior. Priorities describe the prototype's intended functional importance, not a contractual production service level.
 \begin{table}[h!]
@@ -435,7 +471,11 @@ FR6 & Store file content on Master and expose key-based retrieval & Upload/downl
 \hline
 FR7 & Schedule eligible worker replicas and track acknowledgements & Storage page and Agent logs & Medium \\
 \hline
-FR8 & Reserve 2--3 workers for a DDP run and expose rank status/artifact & Run status and rank-zero artifact & Medium \\
+FR8 & Reserve 2--3 workers for DDP and expose rank status/artifact & Run status and rank-zero artifact & Medium \\
+\hline
+FR9 & Authenticate students and scope client jobs, files, and training history to each account & Two-account access-control check & High \\
+\hline
+FR10 & Run FedAvg on 2--20 workers and record a single-PC baseline comparison & Run report and model artifact & High \\
 \hline
 NFR1 & Operate within approved Windows/WSL2/Docker campus environment & Deployment record & High \\
 \hline
@@ -443,25 +483,41 @@ NFR2 & Keep user-facing pages separate from per-node execution & Architecture an
 \hline
 NFR3 & Make failure and prototype limitations explicit to operators & Logs, status and report caveats & High \\
 \hline
-NFR4 & Restrict prototype access to a trusted network until auth exists & Deployment review & Critical \\
+NFR4 & Keep operator APIs on an approved trusted network and protect client account data & Deployment review & Critical \\
 \hline
 \end{tabular}
 \end{table}
 
 	\subsubsection{Flowcharts, Data Flow, and Functional Design}
-The ordinary job data flow is: user submits a request to the dashboard; the dashboard sends it to the Master; the Master queues and attempts first-fit placement; the selected Agent polls and receives the assignment; Docker runs the container; and the Agent sends completion status and output to the Master for dashboard display. If no node meets the request, the job remains queued. Figure~\ref{fig:job-flow} is reserved for a workflow illustration.
+The ordinary job data flow is: user submits a request to the dashboard; the dashboard sends it to the Master; the Master queues and attempts first-fit placement; the selected Agent polls and receives the assignment; Docker runs the container; and the Agent sends completion status and output to the Master for dashboard display. If no node meets the request, the job remains queued. Figure~\ref{fig:job-flow} depicts this lifecycle.
 
 The heartbeat path runs independently of job submission. At its configured interval, each Agent samples local information and sends a heartbeat containing its node identity, IP address, CPU and memory totals/free values, disk information, and status. The Master updates the node record and last-seen time. A stale heartbeat eventually causes the node to be considered offline. This mechanism provides liveness information but is not a continuous resource reservation: the host may change resource use between measurements.
 
 The storage path begins when the browser uploads a multipart file to the Master. The Master stores the file and associates it with a randomly generated key in the JSON index. Where disk capacity permits, the storage service queues replica work. An Agent pulls a replica task, fetches the primary content, writes it to its configured storage directory, and sends a completion acknowledgement. The primary Master copy remains the authoritative source. If an Agent is offline or does not have enough disk, a worker replica may not be created.
 
-The DDP path differs from an ordinary job because a run requires a group of workers to start coordinated ranks. The Master validates the uploaded archive and request, finds the requested number of eligible PCs, reserves them together, and creates a rank assignment for each. Each Agent runs the same training bundle in the configured CPU worker image. The user's script initializes the Gloo process group, partitions examples (for example with \texttt{DistributedSampler}), and wraps the model using DDP. Rank zero writes the requested model artifact and uploads it to the Master. Failures in a rank or the peer network can fail the group; there is no checkpoint-based recovery.
+The DDP path differs from an ordinary job because a run requires a group of workers to start coordinated ranks. The Master validates the archive and request, reserves eligible PCs, and creates a rank assignment for each. The user's script initializes Gloo, partitions examples, and wraps the model using DDP. Rank zero uploads the final artifact. A rank or peer-network failure can fail the group; there is no checkpoint-based recovery.
 
-\textbf{Logical data-flow boundary.} The browser exchanges HTTP requests and responses with the Master. Agents exchange heartbeats, assignment polls, job state updates, and storage replica messages with the Master. Worker containers receive assignments through their Agents and, for DDP only, exchange distributed-training traffic directly with peer workers. The user's browser does not open a direct execution channel to a worker. Keeping these paths distinct aids diagnosis: a successful dashboard API call, a live Agent heartbeat, a successful ordinary job, and a successful multi-node DDP run each validate different parts of the system.
+The FedAvg path is coordinator-mediated. The Master reserves 2--20 eligible PCs and starts one local training task per worker. Every worker downloads the same bundle, uses its rank and the requested world size to select a non-overlapping shard, trains locally, and posts its checkpoint to the Master. Rank zero waits for all updates, downloads them, performs sample-weighted averaging, and uploads the aggregate artifact. The same rank-zero machine then trains on the complete dataset as a single-PC baseline. Thus its comparison report distinguishes the baseline training duration, distributed phase duration, and overall elapsed run duration. A single successful run demonstrates this workflow, but does not by itself establish a general speedup.
+
+\textbf{Logical data-flow boundary.} The browser exchanges HTTP requests and responses with the Master. Agents exchange heartbeats, assignment polls, job state updates, and storage replica messages with the Master. FedAvg containers also use the Master for bundle and checkpoint transfers; DDP containers exchange training traffic directly with peer workers. A successful heartbeat validates only Agent-to-Master reachability, not DDP peer connectivity. The user's browser never opens an execution channel to a worker.
 
 \begin{figure}[htbp]
 \centering
-\safeincludegraphics[width=0.88\linewidth,height=6.5cm,keepaspectratio]{img3.png}
+\begin{tikzpicture}[node distance=0.55cm and 0.45cm]
+  \node[reportsmall] (submit) {Student submits job};
+  \node[reportsmall,right=of submit] (api) {Master validates and queues};
+  \node[reportsmall,right=of api] (schedule) {First-fit selects eligible PC};
+  \node[reportsmall,right=of schedule] (agent) {Agent polls and receives assignment};
+  \node[reportsmall,right=of agent] (docker) {Docker runs capped container};
+  \node[reportsmall,right=of docker] (result) {Agent reports result to Master};
+  \draw[reportarrow] (submit) -- (api);
+  \draw[reportarrow] (api) -- (schedule);
+  \draw[reportarrow] (schedule) -- (agent);
+  \draw[reportarrow] (agent) -- (docker);
+  \draw[reportarrow] (docker) -- (result);
+  \node[below=0.65cm of schedule,reportsmall,text width=4cm] (queued) {No eligible node: job remains queued};
+  \draw[reportarrow,dashed] (schedule) -- (queued);
+\end{tikzpicture}
 \caption{Ordinary job submission, placement, and execution workflow.}
 \label{fig:job-flow}
 \end{figure}
@@ -500,6 +556,10 @@ TC11 & DDP worker network unavailable & Run failure is visible; no successful ar
 \hline
 TC12 & Repeated identical job trials & All trial outcomes and elapsed times are recorded, including failures & Pending lab test \\
 \hline
+TC13 & Two student accounts & Each account lists and downloads only its own uploaded files and jobs & Pending lab test \\
+\hline
+TC14 & FedAvg run with single-PC baseline & Aggregate model, worker metrics, baseline metrics, and report are available & Pending lab test \\
+\hline
 \end{tabular}
 \end{table}
 
@@ -527,41 +587,59 @@ The scheduler's node eligibility predicate can be stated as: the node is online;
 
 \textbf{Complexity and design trade-off.} If a scheduling pass examines \(J\) queued jobs and scans up to \(N\) registered nodes for each job, the upper-bound comparison work is proportional to \(J\times N\). For the intended small demonstration pool this is straightforward and inexpensive; there is no benchmark claim for larger \(N\). First-fit may leave some capacity fragmented or may favor nodes earlier in the registry iteration order. Sorting by resource efficiency, fair shares, load prediction, queue aging, or data locality would alter the policy and should be introduced only with an explicit design and comparative evaluation.
 
-\textbf{DDP group placement.} The DDP workflow must find a complete set of two or three eligible workers before starting the ranks. This is a gang-scheduling constraint: a partial group is not sufficient for a coordinated run. The same bundle is made available to each selected rank; data partitioning belongs to the submitted Python program. At the application level, DDP synchronizes gradients; it does not merge independently trained model files after the fact. Run completion therefore depends on compatible software, rank initialization, network paths, and rank-zero artifact upload.
+\textbf{DDP group placement.} The DDP workflow must find a complete set of two or three eligible workers before starting ranks. The same bundle is available to each rank; the submitted Python program partitions data and performs gradient synchronization. Completion depends on compatible software, rank initialization, direct network paths, and rank-zero artifact upload.
+
+\textbf{FedAvg coordinator workflow.} The separate FedAvg route supports 2--20 selected workers. Every worker downloads the same bundle but selects a deterministic data shard based on rank and world size. Workers train locally and upload checkpoints to the Master over HTTP. Rank zero waits for all updates, downloads them, computes a sample-weighted average, and uploads the aggregate model. It then trains the same model on the full dataset for the configured number of epochs as a single-PC baseline. The JSON report records FedAvg metrics, baseline metrics, distributed phase duration, baseline training time, and total run elapsed time. Worker-to-worker TCP connectivity is not used by this workflow.
 
 \textbf{Data and state design.} A node record represents a worker known to the Master and includes a stable node ID, IP address, reported CPU/RAM/disk capacity, status, and last-heartbeat time. A job record contains its generated ID, requested CPU and RAM, command/image information, status, optional assigned node, and result. Booking records contain a node, requester, interval, and requested resources, but are in-memory and do not enforce a persistent reservation calendar. Distributed-training run state includes run-level configuration and per-worker/rank status. File metadata links a generated key and file properties to the Master-stored content and any known replica nodes. This separation reflects the different durability mechanisms: in-memory control state versus filesystem-backed shared file content.
 
-\textbf{API interaction design.} Dashboard and Agent clients use the Master as the API boundary. Node summary and job/run status are read operations. Heartbeat, job submission, state updates, file upload, replica acknowledgement, and DDP submission are write or transfer operations. Assignment retrieval uses Agent polling; a no-work response is an expected condition rather than a failure. The detailed endpoint list and typical request shape are included in Appendix~B. The endpoint contract does not add authentication: deployment must treat API access as trusted-network access.
+\textbf{API interaction design.} Operator, student, and Agent clients use the Master as the API boundary. Student endpoints require a signed-in session and return only that account's permitted resources. Assignment retrieval uses Agent polling; a no-work response is expected. The endpoint summary is included in Appendix~A. Client login provides prototype account separation, while operator APIs remain restricted to a trusted network.
 
 \textbf{Configuration and installation design.} A Master may be discovered through the configured rendezvous service, UDP discovery, or the local-subnet fallback; an explicit Master URL is available when automatic discovery cannot identify the correct interface. The portable Agent package keeps the launcher, executable JAR, and properties file together. The setup helper prepares Windows features and Docker Desktop, but requires elevated privileges and can require a reboot. Therefore, installation is an operational procedure requiring lab administrator approval and verification on a non-critical test machine before wider deployment.
 
     \subsubsection{User Interface and User Experience}
-The dashboard includes overview, booking, jobs, storage, and distributed-training pages. The supplied screenshot should be captured from the running application and should show the actual implemented UI rather than a generated mockup. Figure~\ref{fig:dashboard} contains the existing illustrative dashboard image; add a current live screenshot as final evidence if this image is not from the running deployment.
+The operator dashboard includes overview, booking, jobs, storage, DDP, and federated-training pages. The separate student client includes a resource dashboard, jobs, storage, and the student's training history. The screenshot should be captured from the running application rather than a mockup. Figure~\ref{fig:dashboard} is an explicit placeholder if the live screenshot file is not supplied.
 
-The overview page is intended to answer whether workers are online and what resource capacity they report. The job and terminal-style pages let a user submit commands and inspect their status and output after completion; the word "terminal" describes a batch command bridge and does not mean an interactive, streaming shell. The booking page allows a user to target an online node and request a time-limited container session, while the separate booking API stores simple in-memory booking records. The storage page shows file metadata and access keys and supports upload/download. The distributed-training page accepts a ZIP bundle and configuration, and displays the run and rank status and artifact link. Each screenshot should be labelled with the page name and should avoid exposing access keys, private network addresses, or personal data.
+The overview page is intended to answer whether workers are online and what resource capacity they report. The job and terminal-style pages let a user submit commands and inspect their status and output after completion; the word "terminal" describes a batch command bridge and does not mean an interactive, streaming shell. The booking page allows a user to target an online node and request a time-limited container session, while the separate booking API stores simple in-memory booking records. The storage page shows file metadata and access keys and supports upload/download. The DDP and FedAvg pages accept compatible ZIP bundles and settings; they display worker status, metrics, comparison timing, reports, and available model artifacts. Each screenshot should be labelled with the page name and should avoid exposing access keys, private network addresses, or personal data.
 
-The UX should present states explicitly: online/offline for nodes and queued/assigned/running/done/failed for jobs. For no-capacity conditions, a queued state should not be presented as if execution has started. For storage, the availability of the Master primary and the count/status of worker replicas should remain distinct. For DDP, users should be informed that all selected workers need a compatible image and peer network connectivity, and that the uploaded script must implement DDP itself. These distinctions help avoid overpromising behavior not present in the implementation.
+The UX should present states explicitly: online/offline for nodes and queued/assigned/running/done/failed for jobs. For DDP, selected workers need a compatible image and peer connectivity, and the uploaded script must implement DDP. For FedAvg, worker containers need Master API access; the bundle must implement local training and compatible model updates. These methods should not be combined when reporting results.
 
 \begin{figure}[htbp]
 \centering
-\safeincludegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{img4.png}
-\caption{Illustrative IdleGrid dashboard view with five simulated worker nodes and sample resource availability.}
+\IfFileExists{img4.png}{\includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{img4.png}}{\missingfigure{7cm}{Insert a genuine screenshot of the running operator dashboard. Recommended view: overview with online PCs and CPU, RAM, and disk capacity. Redact private IP addresses and identifiers.}}
+\caption{Operator dashboard view. If the existing image is illustrative, replace it with a genuine screenshot from the running application.}
 \label{fig:dashboard}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\IfFileExists{student-client.png}{\includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{student-client.png}}{\missingfigure{7cm}{Insert a screenshot of the separate student client after login. Recommended view: student resource dashboard. Redact usernames, session details, and private IP addresses.}}
+\caption{Student client dashboard; required screenshot filename: \texttt{student-client.png}.}
+\label{fig:student-client}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\IfFileExists{fedavg-comparison.png}{\includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{fedavg-comparison.png}}{\missingfigure{7cm}{Insert a screenshot of a completed FedAvg run showing the worker statuses and single-PC comparison card. Use actual run values only.}}
+\caption{FedAvg run and baseline comparison; required screenshot filename: \texttt{fedavg-comparison.png}.}
+\label{fig:fedavg-comparison}
 \end{figure}
 	%\subsubsection{sequence diagram}
 	\pagebreak
 	\section{Performance Study}
 	\subsection{Implementation and Experimental Environment}
 
-The documented implementation uses Java 17 and Spring Boot 3.3.4 for the Master, a Java 17 background Agent packaged for Windows, and React 18, Vite, and Tailwind CSS for the dashboard. Worker jobs run in Docker Desktop using its WSL2 backend. The separate distributed-training image provides a CPU-based PyTorch/Gloo runtime. The Master exposes HTTP on port 9090 and local Agent discovery uses UDP port 9091. The dashboard development server uses port 5173. These technologies are already integrated in the project; the report does not propose a replacement stack.
+The documented implementation uses Java 17 and Spring Boot 3.3.4 for the Master, a Java 17 background Agent packaged for Windows, and React 18, Vite, and Tailwind CSS for the dashboard. Worker jobs run in Docker Desktop using its WSL2 backend. The separate distributed-training image provides a CPU-based PyTorch/Gloo runtime. The Master exposes HTTP on port 9090 and local Agent discovery uses UDP port 9091. The operator dashboard and student client are separate browser applications; the dashboard development server uses port 5173. These technologies are already integrated in the project; the report does not propose a replacement stack.
 
-The evaluation site is the CSE Department Database Management Lab, which has more than 20 lab PCs equipped with Intel Core i5 processors. The current IdleGrid prototype demonstration is scoped to three participating worker PCs; the lab's total inventory must not be confused with the number of Agents actually running. Exact CPU model/generation, RAM, operating-system version, Docker/WSL2 versions, and network type were not supplied and must be recorded from the selected PCs. DDP currently supports two or three workers. The following are proposed test conditions, not completed experiments:
+The evaluation site is the CSE Department Database Management Lab, which has more than 20 lab PCs equipped with Intel Core i5 processors. One recorded FedAvg demonstration used three participating workers; this is not a claim that all lab PCs have been deployed. The FedAvg implementation accepts up to 20 workers, subject to online-node availability and per-node resources. Exact CPU model/generation, RAM, operating-system version, Docker/WSL2 versions, and network type must be recorded from selected PCs. DDP currently supports two or three workers. The following are proposed test conditions, not completed experiments:
 \begin{itemize}
-  \item Worker count for ordinary jobs: 1, 2, and 3 online worker nodes in the current prototype scope.
+  \item Worker count for ordinary jobs: 1, 2, 3, and larger available online worker sets.
   \item Job resource requests: record at least two CPU limits and two memory limits that every selected worker can support; a small smoke-test request may use 1 CPU and 512 MB RAM.
   \item Job type: short deterministic commands for scheduling checks, followed by a representative CPU workload for timing and resource observation.
   \item Node availability: all selected workers online, then one worker stopped during a controlled run to observe failure handling.
-  \item DDP worker count: 2 and 3, using the same bundle, image, training command, and dataset for comparable trials.
+  \item DDP worker count: 2 and 3, using the same bundle, image, training command, and dataset; direct peer networking must be available.
+  \item FedAvg worker count: 2, 3, 5, 10, and up to 20 eligible PCs, subject to Agents being online and resource requests being available.
+  \item FedAvg baseline: use the same 900-image bundle, model, and epoch count on one PC; compare baseline training time with distributed phase and total elapsed time.
 \end{itemize}
 
 Table~\ref{tab:environment} records known lab facts and marks unverified per-PC details. Hardware variation matters because processor generation, memory pressure, disk speed, and network connection can affect scheduling and execution time. Use stable labels such as Master, Worker 1, and Worker 2; do not publish private node IDs or addresses.
@@ -571,9 +649,9 @@ Table~\ref{tab:environment} records known lab facts and marks unverified per-PC 
 \label{tab:environment}
 \begin{tabular}{|p{0.17\linewidth}|p{0.22\linewidth}|p{0.22\linewidth}|p{0.22\linewidth}|}
 \hline
-Property & Master PC & Worker PC 1 & Worker PCs 2--3 \\
+Property & Master PC & Worker PC 1 & Other workers (up to 20) \\
 \hline
-PC/model identifier & CSE DBMS Lab host (verify) & Lab PC 1 (model not recorded) & Lab PCs 2--3 (models not recorded) \\
+PC/model identifier & CSE DBMS Lab host (verify) & Lab PC 1 (model not recorded) & Lab PCs (models not recorded) \\
 \hline
 Processor / logical CPUs & Intel Core i5 (exact model not recorded) & Intel Core i5 (exact model not recorded) & Intel Core i5 (exact model not recorded) \\
 \hline
@@ -592,38 +670,38 @@ Network connection & Campus lab network (verify link type) & Campus lab network 
 
 Define the following measurements for each completed trial. Let \(T_s\) be the time the Master accepts a job submission, \(T_a\) the time it assigns a worker, \(T_r\) the time the container is reported running, and \(T_f\) the time completion is reported. Queue-to-assignment delay is \(T_a-T_s\). Assignment-to-start delay is \(T_r-T_a\). Container makespan is \(T_f-T_r\); end-to-end job latency is \(T_f-T_s\). Separating these values distinguishes scheduling and polling overhead from workload execution, provided the timestamps are captured consistently.
 
-For a fixed set of submissions, completion ratio is \(N_{\mathrm{successful}}/N_{\mathrm{submitted}}\), where a successful job must reach the documented success state and produce its expected output. Throughput is \(N_{\mathrm{successful}}/T_{\mathrm{window}}\), where the observation window is explicitly defined. Mean CPU utilization is the time-average of measured worker CPU use divided by the worker's logical CPU capacity; memory utilization is the time-average of used memory divided by total memory. Record the sampling interval and source of these utilization measurements. Storage replica completion ratio is completed replicas divided by replica tasks issued during the trial, with the primary upload outcome reported separately. DDP speedup is \(T_1/T_p\) only when a comparable single-worker baseline \(T_1\) and a \(p\)-worker runtime \(T_p\) use the same model, dataset, software image, epoch count, and batch-size policy. A failed or timed-out run is not silently discarded; report it as a failure and state how it was handled in summary statistics.
+For a fixed set of submissions, completion ratio is \(N_{\mathrm{successful}}/N_{\mathrm{submitted}}\), where success requires the expected output. Throughput is \(N_{\mathrm{successful}}/T_{\mathrm{window}}\). Mean CPU and memory utilization require host measurements; Docker limits are not utilization readings. Storage replica completion ratio is completed replicas divided by tasks issued, with the Master primary outcome reported separately. DDP speedup is \(T_1/T_p\) only when comparable single-worker and multi-worker DDP runs use the same model, dataset, image, epoch count, and batch policy. FedAvg reports single-PC training time, distributed phase time, and total elapsed time separately. Do not label a baseline-to-phase ratio as end-to-end speedup because total elapsed also includes setup, communication, aggregation, and the baseline pass. Report failures and timeouts.
 
 Owner impact should use an explicitly defined task instead of a subjective claim alone. Possible observations include foreground task response time, completion time of a fixed interactive operation, and a short user-rated smoothness scale collected with consent. Record the workload's requested CPU/RAM, whether the node was active or idle at start, whether eviction occurred, and the foreground baseline. The report should avoid presenting a single informal observation as proof of general non-interference.
 
 	\subsection{Results and Analysis}
-No measured performance dataset or trial log has been provided. As requested for this working draft, Table~\ref{tab:results} contains provisional planning estimates or explicit “not measured” entries. These estimates are not observations, must not be described as experimental findings, and must be replaced with actual lab results before final submission. Record failures as well as successful trials and note conditions that could explain variation.
+One successful FedAvg demonstration log is available: three workers trained on a 90-image bundle for two local epochs; the run completed in 12.462 seconds with weighted accuracy 33.3\% and weighted loss 1.1213. This is one workflow demonstration on a small synthetic dataset, not a repeated benchmark or evidence of useful model quality. The newer 900-image bundle and automated single-PC comparison have not yet produced recorded lab results. Table~\ref{tab:results} separates the observed demonstration from measurements still to be collected. Record failed trials as well as successful ones.
 
 Use the following sequence for each experiment group. First, verify all selected Agents are online and record their reported capacity. Second, submit one fixed workload and capture the returned job/run identifier and server-side timestamps or available log timestamps. Third, follow it through assignment, container start, and completion, saving the output and relevant logs. Fourth, verify correctness by checking the expected command output, file checksum, or DDP artifact. Finally, repeat the same configuration enough times to characterize variability and document every failure. If the implementation does not expose a timestamp needed for a metric, state the measurement method and instrument consistently rather than implying precision the system does not provide.
 
 For ordinary scheduling, test a workload that is sufficiently long to separate execution time from startup overhead, then run shorter jobs to characterize overhead. Keep the requested CPU and memory values constant when comparing worker counts. When comparing resource requests, keep the same node set and workload. Use separate tables or charts for cold-image and warm-image runs because pulling a container image adds network and startup cost. When measuring throughput, define whether jobs are submitted serially or concurrently and report the queue length; otherwise throughput values from different experiments are not directly comparable.
 
-For shared storage, use known file sizes and verify downloaded bytes with a checksum. Record upload latency, download latency, the number of replica tasks created, successful acknowledgements, and the number of workers eligible at the start. The implementation's replica target is up to two worker copies, not a guarantee of two copies for every file. For DDP, use the same data bundle and training parameters for all worker counts, record the image digest or precise image version if available, and confirm the artifact file can be downloaded and opened. A DDP run that completes with two workers establishes a functional test for that setup, but not a general speedup claim.
+For shared storage, use known file sizes and verify downloaded bytes with a checksum. Record upload latency, download latency, replica tasks, acknowledgements, and eligible workers. For DDP, use the same bundle and parameters for all worker counts, record the image digest, and verify the artifact. For FedAvg, use the same bundle, model, and epoch count at each worker count; save the JSON report and compare baseline metrics, distributed metrics, and total elapsed time. The built-in dataset contains 900 synthetic images (300 per class: circle, square, triangle); it demonstrates the pipeline and does not represent a real application dataset.
 
 \begin{table}[h!]
 \centering
-\caption{Provisional planning estimates only; none of these entries is a measured result. Replace them with actual observations before final submission.}
+\caption{One recorded demonstration result and measurements still required.}
 \label{tab:results}
 \begin{tabular}{|p{0.25\linewidth}|p{0.22\linewidth}|p{0.22\linewidth}|p{0.2\linewidth}|}
 \hline
-Measurement & Test configuration & Provisional estimate / status & Notes \\
+Measurement & Test configuration & Observed result / status & Notes \\
 \hline
-Queue-to-assignment delay & 1--3 workers; eligible request & 0--1 s (estimate) & Submission triggers immediate placement; not measured \\
+FedAvg workflow completion & 3 workers; 90 images; 2 epochs & Completed in 12.462 s & One run from the recorded report; not a repeated benchmark \\
 \hline
-Job makespan & 1 CPU / 512 MB smoke job; warm image & 5--30 s (rough estimate) & Workload- and startup-dependent; not measured \\
+FedAvg weighted accuracy / loss & Same recorded run & 33.3\% / 1.1213 & Accuracy is at chance level for 3 balanced classes; model quality was not demonstrated \\
 \hline
-Job completion ratio & Small controlled demo & Not estimated & Requires actual successful/total job counts \\
+FedAvg worker local compute & Three workers; same run & 0.213 s / 0.146 s / 0.144 s & Worker 0/1/2 times; excludes scheduling and transfer \\
 \hline
-Worker CPU/memory utilization & 1 CPU / 512 MB request example & At or below requested container limits & Host utilization not measured; Docker limits are not usage readings \\
+900-image FedAvg vs single-PC baseline & Same model and epoch count & Not yet measured & Run on target PCs and retain structured report \\
 \hline
-Storage replica completion ratio & One file; up to two eligible workers & Target: up to 2 replicas & Success ratio not measured; depends on disk and worker availability \\
+FedAvg scaling & 2, 3, 5, 10, up to 20 workers & Not yet measured & 20 is a supported request cap, not a performance result \\
 \hline
-DDP runtime / speedup & 2 or 3 workers; sample bundle & Not estimated & Requires comparable single-worker and multi-worker trials \\
+Job, storage, and DDP performance & Controlled lab trials & Not yet measured & Requires repeat trials and verified observations \\
 \hline
 Owner responsiveness impact & Approved foreground-task trial & Not estimated & Requires controlled user-impact measurements \\
 \hline
@@ -632,48 +710,69 @@ Owner responsiveness impact & Approved foreground-task trial & Not estimated & R
 
 For each row in Table~\ref{tab:results}, attach a trial sheet containing: trial number; start/end date and local time; Master and worker labels; node count; CPU and RAM request; image version and cache state; workload command and input checksum; job or run ID; measured timestamps; final state; output/artifact verification; and relevant error/log summary. Report central tendency and variability when multiple trials are available. For small samples, show the individual observations as well as any mean or median so the reader can see outliers.
 
-Figure~\ref{fig:ddp-flow} shows the existing DDP workflow illustration. Figure~\ref{fig:results-chart} remains reserved for a chart produced from measured data in Table~\ref{tab:results}; do not plot these estimates as experimental evidence.
+Figure~\ref{fig:training-modes} contrasts the peer-to-peer DDP path with the coordinator-mediated FedAvg path. Figure~\ref{fig:results-chart} is reserved for a chart produced from repeated measured trials; do not plot planning values as experimental evidence.
 
 \begin{figure}[htbp]
 \centering
-\safeincludegraphics[width=0.88\linewidth,height=6.5cm,keepaspectratio]{img5.png}
-\caption{Distributed training workflow implemented by the prototype.}
-\label{fig:ddp-flow}
+\begin{tikzpicture}[node distance=0.75cm and 0.8cm]
+  \node[reportbox,text width=2.4cm] (master) {Master\\selects workers\\serves data bundle};
+  \node[reportsmall,above right=0.55cm and 1.15cm of master] (d0) {DDP rank 0};
+  \node[reportsmall,right=0.7cm of d0] (d1) {DDP rank 1};
+  \node[reportsmall,right=0.7cm of d1] (dn) {DDP ranks 2--N};
+  \draw[reportarrow] (master.east) -- (d0.west);
+  \draw[reportarrow] (master.east) -- (d1.west);
+  \draw[reportarrow] (master.east) -- (dn.west);
+  \draw[reportarrow] (d0) -- node[above,font=\scriptsize]{gradient synchronization over peer network} (d1);
+  \draw[reportarrow] (d1) to[bend right=18] (d0);
+  \node[reportsmall,below right=0.55cm and 1.15cm of master] (f0) {Worker 0 trains local shard};
+  \node[reportsmall,right=0.7cm of f0] (f1) {Workers train local shards};
+  \node[reportbox,text width=2.6cm,right=0.85cm of f1] (aggregate) {Master-mediated update transfer\\sample-weighted FedAvg};
+  \node[reportsmall,right=0.65cm of aggregate] (baseline) {Single-PC full-data baseline\\and comparison report};
+  \draw[reportarrow] (master.east) -- (f0.west);
+  \draw[reportarrow] (master.east) -- (f1.west);
+  \draw[reportarrow] (f0.east) -- node[above,font=\scriptsize]{checkpoint uploads} (aggregate.west);
+  \draw[reportarrow] (f1.east) -- (aggregate.west);
+  \draw[reportarrow] (aggregate) -- (baseline);
+  \node[above=0.45cm of d1,font=\small\bfseries] {DDP: workers communicate directly};
+  \node[below=0.45cm of f1,font=\small\bfseries] {FedAvg: workers communicate through the Master};
+\end{tikzpicture}
+\caption{The two distributed-training workflows supported by IdleGrid.}
+\label{fig:training-modes}
 \end{figure}
 
 \begin{figure}[htbp]
 \centering
-\fbox{\parbox[c][4cm][c]{0.88\linewidth}{\centering\textbf{Performance chart to be added after experiments}}}
-\caption{Measured performance comparison (to be generated from recorded experimental data).}
+\missingfigure{5cm}{Insert a chart generated from repeated lab measurements. Recommended chart: single-PC baseline training time versus FedAvg distributed phase time and end-to-end run time for 2, 3, 5, 10, and selected larger worker counts. Use the same dataset, model, and epoch count. Include actual values and error bars; omit configurations not tested.}
+\caption{Performance comparison to be generated from repeated recorded trials.}
 \label{fig:results-chart}
 \end{figure}
 
-The interpretation of these measurements should separate scheduler overhead from workload execution, and should report whether any apparent improvement is repeatable. A higher worker count does not necessarily reduce runtime for a small workload because startup, bundle transfer, communication, and network overhead may dominate. Any owner-impact conclusion must be based on a controlled observation rather than inferred from the presence of Docker limits.
+The interpretation of these measurements should separate scheduler overhead from workload execution and report whether any apparent improvement is repeatable. A higher worker count does not necessarily reduce runtime for a small workload because startup, bundle transfer, aggregation, and network overhead may dominate. Any owner-impact conclusion must be based on a controlled observation rather than inferred from the presence of Docker limits.
 
-The analysis should answer the question represented by each experiment rather than merely restating a table. If assignment delay rises with worker count, inspect Master scheduling and heartbeat processing; if container makespan changes, consider CPU contention, memory pressure, input/output behavior, and hardware differences. If a DDP run with more workers is slower, discuss the work size, synchronization overhead, image startup, and network transfer before attributing the result to an algorithm. If replicas are not created, distinguish insufficient worker disk from offline workers, delayed polling, or transfer failure. Discuss both expected behavior and surprises, and include unsuccessful runs as operational evidence.
+The analysis should answer the question represented by each experiment rather than merely restating a table. If assignment delay rises with worker count, inspect Master scheduling and heartbeat processing; if container makespan changes, consider CPU contention, memory pressure, input/output behavior, and hardware differences. If a DDP run with more workers is slower, discuss synchronization, image startup, and peer-network overhead. If FedAvg is slower, distinguish local training from bundle/checkpoint transfer, waiting, and aggregation. If replicas are not created, distinguish insufficient worker disk from offline workers, delayed polling, or transfer failure. Discuss both expected behavior and surprises, and include unsuccessful runs as operational evidence.
 
 \textbf{Threats to validity.} A small number of lab machines cannot establish datacenter-scale behavior. Heterogeneous hardware and background user activity can confound comparisons. Image pulls and training-bundle uploads can dominate short-run times. Clock differences across PCs can distort timestamps unless time synchronization is verified; prefer Master-side timestamps for cross-node lifecycle measures where possible. Network congestion, Wi-Fi isolation, firewall rules, and Docker host networking affect DDP independently of compute capacity. Finally, a synthetic image-classification bundle validates the workflow but does not establish model quality on a real application dataset.
 
 	\subsection{Summary of Performance Study}
 
-The current report establishes the metrics and experiment matrix but contains no measured values. It cannot yet determine whether first-fit placement, DDP, or resource capping performs better under any tested condition. The ordinary scheduler performs a linear scan over registered nodes for each queued job, giving \(O(JN)\) placement work for \(J\) queued jobs and \(N\) nodes in a pass; this is suitable for a small prototype but has not been benchmarked at larger scale. Complete the result table and analyze actual observations before drawing conclusions about throughput, scalability, or user impact.
+The available log confirms one three-worker FedAvg workflow completed, but it is not enough to determine whether FedAvg is faster or scales effectively. The 900-image single-PC comparison and repeated worker-count trials remain to be collected. The ordinary scheduler scans registered nodes for each queued job, giving \(O(JN)\) placement work for \(J\) queued jobs and \(N\) nodes in a pass; this is suitable for a small prototype but has not been benchmarked at larger scale.
     
     \subsection{Limitations}
-The prototype targets a small trusted campus LAN and Windows worker PCs using Docker Desktop and WSL2; results may not generalize to other operating systems, networks, or large clusters. Node, job, booking, and training-run control state is held in memory and is lost when the Master restarts. There is no authentication or authorization, and a file access key grants download access to its holder. Worker file replicas are best-effort and are not backed by a repair or rebalance guarantee.
+The prototype targets a trusted campus LAN and Windows worker PCs using Docker Desktop and WSL2; results may not generalize to other operating systems, networks, or large clusters. Node, job, booking, student session, and training-run control state is held in memory and is lost when the Master restarts. Student account hashes are file-backed and client endpoints scope jobs and files to the logged-in account, but this is not production-grade authentication. Operator APIs remain sensitive, and worker file replicas are best-effort without repair or rebalance guarantees.
 
-Reported capacity can become stale between heartbeat and scheduling, and the first-fit scheduler does not provide fairness or optimal packing. The Agent's activity detection and return-to-active eviction do not guarantee negligible owner impact; an evicted job is failed rather than checkpointed and resumed. Ordinary job output is collected after completion, not streamed through a live interactive terminal. DDP depends on compatible images, Docker Desktop host networking, and direct inter-worker TCP connectivity; loss of a DDP worker can fail the run. The report's performance conclusions remain incomplete until repeatable measurements are collected on approved lab hardware.
+Reported capacity can become stale between heartbeat and scheduling, and first-fit does not provide fairness or optimal packing. Agent activity detection and return-to-active eviction do not guarantee negligible owner impact; an evicted job is failed rather than resumed. Ordinary job output is collected after completion rather than streamed. DDP depends on compatible images, networking, and direct inter-worker TCP connectivity. FedAvg avoids peer TCP but depends on each worker reaching the Master and uses a single aggregation round in this prototype. Performance conclusions remain limited until repeatable measurements are collected on approved lab hardware.
 
 \pagebreak
 \section{Conclusions and Future Work}
 
-IdleGrid implements a campus-focused prototype for discovering worker PCs, monitoring reported resources, placing ordinary jobs with a first-fit scheduler, running those jobs in Docker containers, managing shared files with best-effort worker replicas, and coordinating CPU-based PyTorch DDP runs across a small worker group. These features address the engineering objective of integrating compute monitoring, execution, storage, and distributed-training workflows behind one Master and dashboard. However, the supplied project documentation contains no measured experiment results, so the effectiveness, performance, and owner impact cannot yet be judged quantitatively. The prototype's known constraints include in-memory control state, absence of authentication, approximate capacity reports, limited fault recovery, and network/configuration dependencies. Consequently, the system is a working-scope prototype whose performance and suitability for lab use must be confirmed through controlled tests and administrative review.
+IdleGrid integrates compute monitoring, first-fit job placement, Docker execution, shared storage, a separate authenticated student client, DDP, and coordinator-mediated FedAvg behind a central Master. One recorded FedAvg run completed across three workers, but no repeated performance trial or 900-image single-PC comparison has yet been recorded. The project therefore demonstrates the workflow, while speedup, scaling, and owner impact still require controlled tests. Constraints include in-memory control state, prototype-level student authentication, approximate resource reports, limited failure recovery, best-effort replicas, and network dependencies.
 
-Future work should first collect repeatable measurements on the target PCs and improve validation and observability. Further engineering could add authentication, per-user ownership and quotas, persistent control data, stronger failure recovery, checkpoint/restart support, replica repair, and fairness-aware scheduling such as DRF. DDP reliability could be improved through automated network checks and clearer recovery behavior. Any expansion beyond the campus prototype should also evaluate isolation, privacy, resource contention, and administrator approval requirements.
+Future work should run and repeat the 900-image FedAvg comparison at several worker counts, validate the reported metrics, and collect screenshots and logs. Further engineering could strengthen authentication, add durable control records, improve failure recovery and replica repair, and evaluate fairness-aware scheduling such as DRF. DDP reliability could be improved through automated network checks and clearer recovery behavior. Any expansion beyond the campus prototype should evaluate isolation, privacy, resource contention, and administrator approval requirements.
 
 \pagebreak
 
 \section{Scholarly Contributions}
-The local Git history records implementation work on shared storage, the PyTorch DDP workflow and worker image, Master rendezvous/discovery, Agent distribution, and project documentation. The repository is available at \url{https://github.com/avadhutmali/Mega_Project_BTech}. These are collective project outputs; individual member contributions should be added only after the team confirms them.
+The local Git history records implementation work on shared storage, the DDP and FedAvg workflows, the student client, Master rendezvous/discovery, Agent distribution, and project documentation. The repository is available at \url{https://github.com/avadhutmali/Mega_Project_BTech}. These are collective project outputs; individual member contributions should be added only after the team confirms them.
 \begin{enumerate}
 \item Research papers: None identified in the repository history; confirm with the team.
 \item Patents or copyright: No filing details identified; confirm with the team.
@@ -730,11 +829,7 @@ Project repository documentation, DETAILED\_README.md.
 
 \pagebreak
 \appendix
-\section{Appendix A: Plagiarism Report, AI Similarity Report}
-This appendix contains the plagiarism and AI similarity report of the project. 
-
-\pagebreak
-\section{Appendix B: API and Data-Flow Reference}
+\section{Appendix A: API and Data-Flow Reference}
 This appendix summarizes the implemented Master API surfaces described in the project technical guide. It is included to support system understanding and testing; exact field validation and response structures should be checked against the running version of the repository.
 
 \begin{table}[h!]
@@ -763,6 +858,41 @@ Method and path & Caller & Purpose \\
 \hline
 \end{tabular}
 \end{table}
+
+\begin{table}[h!]
+\centering
+\caption{Student-client and federated-training API summary.}
+\label{tab:api-client-training}
+\begin{tabular}{|p{0.34\linewidth}|p{0.2\linewidth}|p{0.34\linewidth}|}
+\hline
+Method and path & Caller & Purpose \\
+\hline
+\texttt{POST /client/auth/login} & Student client & Authenticate a configured student account \\
+\hline
+\texttt{GET /client/nodes} & Student client & Read live lab capacity summary \\
+\hline
+\texttt{GET /client/jobs} & Student client & List only the signed-in student's jobs \\
+\hline
+\texttt{POST /client/jobs} & Student client & Submit a resource-limited student job \\
+\hline
+\texttt{POST /client/jobs/\{id\}/cancel} & Student client & Cancel/release an owned job \\
+\hline
+\texttt{GET/POST /client/storage/files} & Student client & List owned uploads or upload an owned file \\
+\hline
+\texttt{GET /client/storage/files/\{key\}/content} & Student client & Download an owned file \\
+\hline
+\texttt{POST/GET /client/training/runs} & Student client & Submit a student DDP run or list per-user training history \\
+\hline
+\texttt{POST /federated-training/runs} & Operator dashboard & Submit FedAvg and reserve 2--20 workers \\
+\hline
+\texttt{GET /federated-training/runs/\{id\}/report} & Operator dashboard & Download per-worker metrics, comparison, and timing \\
+\hline
+\texttt{GET /federated-training/runs/\{id\}/artifact} & Operator dashboard & Download the aggregated model \\
+\hline
+\end{tabular}
+\end{table}
+
+The student client uses session authentication and backend ownership checks. Student account hashes are file-backed, while sessions, job ownership, and training-history records are in memory for the Master process lifetime. The endpoint list is a summary; request/response schemas should be checked against the running implementation.
 
 \begin{table}[h!]
 \centering
@@ -799,10 +929,10 @@ Method and path & Caller & Purpose \\
 \end{tabular}
 \end{table}
 
-The Master HTTP API uses port 9090 by default. Local Agent discovery uses UDP port 9091, and the default DDP rendezvous port is TCP 29500. The DDP worker may need additional direct connections according to the distributed runtime. Firewall and campus network rules must be verified by the system administrator; a successful heartbeat does not establish that peer-to-peer DDP traffic is permitted.
+The Master HTTP API uses port 9090 by default. Local Agent discovery uses UDP port 9091, and the default DDP rendezvous port is TCP 29500. DDP workers may need additional direct connections. FedAvg worker containers instead contact the Master over HTTP for bundle and update transfers. A successful heartbeat does not establish that peer-to-peer DDP traffic is permitted.
 
 \pagebreak
-\section{Appendix C: Deployment and Experiment Record}
+\section{Appendix B: Deployment and Experiment Record}
 The following checklist is intended for an authorized lab setup and a repeatable demonstration. It is not a substitute for institutional approval, security review, or examination of the setup script before running it with administrator privileges.
 
 \textbf{Pre-deployment checklist:}
@@ -812,9 +942,9 @@ The following checklist is intended for an authorized lab setup and a repeatable
   \item Start the Master and verify the backend is listening on the configured TCP port. Confirm its advertised LAN URL is reachable from each worker.
   \item Install Java 17+ and Docker Desktop with WSL2 on each worker. Run the provided setup helper only after reviewing its effects and coordinating any required restart.
   \item Configure automatic or manual Master discovery, start each Agent, and verify heartbeat visibility in the dashboard and Master logs.
-  \item Pull or locally build the exact ordinary-job and DDP image tags required by the test. Do not assume a public registry package contains a tag until an image pull has been confirmed.
-  \item For DDP, verify host networking and peer TCP reachability among the selected workers before scheduling a training run.
-  \item Use non-sensitive, synthetic test data; keep the API restricted to the approved campus network because the prototype has no authentication.
+  \item Pull or locally build the exact ordinary-job, DDP, and FedAvg image versions required by the test. Record the digest and verify image availability before the run.
+  \item For DDP, verify peer TCP reachability among selected workers. For FedAvg, verify every selected worker can reach the Master API.
+  \item Use non-sensitive synthetic test data and keep operator APIs on the approved campus network. Student login provides prototype account separation but is not a production security boundary.
 \end{enumerate}
 
 \textbf{Per-trial record (copy one record for each run):}
@@ -849,6 +979,6 @@ Errors, logs, exclusions, or deviations & [Complete] \\
 \end{tabular}
 \end{table}
 
-\textbf{Evidence to include in the final submitted copy:} a genuine screenshot of the running dashboard; a redacted node summary; a successful job's state progression and output; a storage upload/download verification; a DDP run status and artifact verification if the multi-node test is available; and the completed trial tables and plots. Replace every bracketed field with verified information or explicitly mark the test as not performed. Replace provisional estimates with measured values before the final printed report; leave date and signature fields for the team to complete after printing.
+\textbf{Evidence to include in the final submitted copy:} genuine screenshots of the operator dashboard and student client; a redacted live node summary; a completed job's state and output; a student file upload/download ownership check; a DDP status/artifact if tested; and a FedAvg JSON report showing the distributed run and single-PC baseline. Add the measured comparison chart only after collecting repeat trials. Replace each bracketed field with verified information or mark the test as not performed. Submit institution-required plagiarism and AI-content similarity documents separately from this project report; do not include them as a project chapter. Leave dates and signatures for the team and guide to complete by hand.
 
 \end{document}

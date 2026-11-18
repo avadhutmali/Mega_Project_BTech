@@ -1,6 +1,7 @@
 """One local training step for IdleGrid's coordinator-mediated FedAvg demo."""
 
 import argparse
+import json
 import random
 import time
 from pathlib import Path
@@ -16,7 +17,8 @@ class TinyImageClassifier(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.Conv2d(3, 12, kernel_size=3, padding=1), nn.ReLU(),
-            nn.AdaptiveAvgPool2d((1, 1)), nn.Flatten(), nn.Linear(12, classes),
+            nn.Conv2d(12, 20, kernel_size=3, padding=1), nn.ReLU(),
+            nn.AdaptiveAvgPool2d((4, 4)), nn.Flatten(), nn.Linear(20 * 4 * 4, classes),
         )
 
     def forward(self, images):
@@ -29,6 +31,7 @@ def main():
     parser.add_argument("--world-size", type=int, required=True)
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--baseline", action="store_true")
     args = parser.parse_args()
 
     random.seed(2026)
@@ -75,7 +78,19 @@ def main():
         "local_seconds": elapsed,
         "rank": args.rank,
     }, args.checkpoint)
-    print(f"rank={args.rank} update_saved={args.checkpoint} local_seconds={elapsed:.3f}", flush=True)
+    if args.baseline:
+        report = {
+            "method": "single PC, full dataset",
+            "samples": len(dataset),
+            "epochs": args.epochs,
+            "seconds": elapsed,
+            "loss": last_loss,
+            "accuracy": accuracy,
+        }
+        Path("baseline_report.json").write_text(json.dumps(report, sort_keys=True))
+        print("BASELINE_REPORT " + json.dumps(report, sort_keys=True), flush=True)
+    else:
+        print(f"rank={args.rank} update_saved={args.checkpoint} local_seconds={elapsed:.3f}", flush=True)
 
 
 if __name__ == "__main__":

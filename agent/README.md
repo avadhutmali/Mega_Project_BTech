@@ -28,9 +28,9 @@ the Agent directly without rerunning setup.
 
 ### Prerequisites (per lab PC — run `setup.ps1` once)
 
-> **The easiest way:** double-click `run-agent.bat`. It checks prerequisites, requests
-> Administrator permission to install/configure missing components, and launches the Agent.
-> If everything is already ready, it skips setup and starts the Agent directly.
+> **Start the Agent:** double-click `run-agent.bat`. It requests Administrator permission,
+> runs `wsl --install` and the Docker Desktop winget install command on every launch, then
+> starts the Agent. Install Java 17+ separately if it is missing.
 
 ```powershell
 # In an Administrator PowerShell, from the extracted IdleGridAgent folder:
@@ -38,16 +38,14 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 .\setup.ps1
 ```
 
-When needed, `setup.ps1` will:
+The optional `setup.ps1` helper will:
 - ✅ Install/update WSL without adding an unused Linux distribution and enable required Windows features
 - ✅ Install Docker Desktop using `winget install -e --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements` (official installer fallback if winget is unavailable)
-- ✅ Configure Docker Desktop (WSL2 backend, resource limits, auto-start)
+- ✅ Configure Docker Desktop (WSL2 backend and resource limits)
 - ✅ Install Java 17 through winget when missing
 - ✅ Run a container smoke test to confirm everything works
 
 > A **reboot** may be required after WSL2 features are installed. Restart the PC and double-click `run-agent.bat` again.
-> Docker Desktop auto-starts when the Windows account used for setup signs in. This is
-> application auto-start, not a Windows background service available before sign-in.
 
 #### Manual prerequisites (if you prefer to set up by hand)
 

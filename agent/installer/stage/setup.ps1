@@ -264,7 +264,6 @@ $settings["wslEngineEnabled"]              = $true
 $settings["useVirtualizationFramework"]    = $false   # WSL2 backend, not HyperV
 $settings["memoryMiB"]                     = $dockerRamMb
 $settings["cpus"]                          = $cpuCount
-$settings["autoStart"]                     = $true    # Docker starts with Windows
 $settings["openUIOnStartupDisabled"]       = $true    # Don't pop the Docker UI on each boot
 $settings["analyticsEnabled"]             = $false
 
@@ -273,19 +272,6 @@ Write-Ok "Docker settings written to: $settingsFile"
 Write-Ok "  WSL2 backend: enabled"
 Write-Ok "  Memory: $dockerRamMb MB"
 Write-Ok "  CPUs: $cpuCount"
-Write-Ok "  Auto-start: enabled"
-
-try {
-    $savedSettings = Get-Content $settingsFile -Raw | ConvertFrom-Json
-    if ($savedSettings.autoStart -eq $true) {
-        Write-Ok "Verified: Docker Desktop starts when this Windows user signs in"
-    } else {
-        Write-Warn "Docker auto-start could not be verified. In Docker Desktop, enable Settings > General > Start Docker Desktop when you sign in."
-    }
-} catch {
-    Write-Warn "Could not verify Docker auto-start in settings. Check Docker Desktop Settings > General after it starts."
-}
-
 # Restart Docker Desktop to apply new settings
 Write-Info "Restarting Docker Desktop to apply settings..."
 try {

@@ -7,13 +7,12 @@ IdleGrid Agent — Portable Windows ZIP
    master.url=http://<master-PC-IP>:9090, for example
    master.url=http://192.168.1.25:9090. Save the file and restart run-agent.bat.
    The public JSONBin ID is preconfigured; Agents read it without an API key.
-3. Double-click `run-agent.bat`. It checks Java, WSL2, and Docker, requests Administrator permission to install/configure missing prerequisites, and then starts the Agent. If it requests a reboot, restart Windows and double-click `run-agent.bat` again.
+3. Double-click `run-agent.bat`. It requests Administrator permission and runs `wsl --install` followed by `winget install -e --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements` every time, then starts the Agent.
 4. Leave the Agent window open while it is running.
 
-The setup script uses winget to install Java 17 and Docker Desktop when available, falling
-back to Docker's official installer. Docker Desktop auto-start is enabled at Windows sign-in
-for the account running setup. If all prerequisites are already ready, the launcher skips
-setup and starts the Agent directly.
+Java 17+ must also be installed. The WSL and Docker commands may report that they are
+already installed; the launcher continues to start the Agent afterward. Reboot Windows if
+WSL requests it.
 
 For distributed PyTorch DDP, pull the CPU worker image on every PC:
   docker pull ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221

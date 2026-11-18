@@ -44,7 +44,7 @@ function App() {
         <div className="section-heading"><p className="eyebrow">Three quick steps</p><h2 id="steps-title">Join the lab grid</h2></div>
         <div className="step-grid">
           <article><span className="step-no">01</span><h3>Download & extract</h3><p>Save the ZIP and extract all files into one folder on the lab PC.</p></article>
-          <article><span className="step-no">02</span><h3>Start the installer</h3><p>Double-click <code>run-agent.bat</code>. It installs missing Java, WSL2, and Docker prerequisites with Administrator permission, then starts the Agent.</p></article>
+          <article><span className="step-no">02</span><h3>Start the Agent</h3><p>Double-click <code>run-agent.bat</code>. Approve Administrator permission; it runs the WSL install and Docker winget commands, then starts the Agent. Java 17+ must be installed separately.</p></article>
           <article><span className="step-no">03</span><h3>Connect to the Master</h3><p>If needed, open <code>agent.properties</code> beside <code>run-agent.bat</code> and set <code>master.url=http://&lt;master-PC-IP&gt;:9090</code>. Then launch <code>run-agent.bat</code>; leave its window open.</p></article>
         </div>
       </section>

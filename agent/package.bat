@@ -23,6 +23,7 @@ mkdir "%STAGE%"
 copy /y "target\%JAR_NAME%" "%STAGE%\%JAR_NAME%" >nul
 copy /y "agent.properties" "%STAGE%\agent.properties" >nul
 copy /y "run-agent.bat" "%STAGE%\run-agent.bat" >nul
+copy /y "install-prerequisites.ps1" "%STAGE%\install-prerequisites.ps1" >nul
 copy /y "setup.ps1" "%STAGE%\setup.ps1" >nul
 copy /y "QUICKSTART.txt" "%STAGE%\QUICKSTART.txt" >nul
 xcopy "training-worker" "%STAGE%\training-worker\" /E /I /Y >nul
@@ -36,6 +37,10 @@ if not exist "%STAGE%\agent.properties" (
 )
 if not exist "%STAGE%\run-agent.bat" (
     echo [ERROR] Could not copy run-agent.bat.
+    exit /b 1
+)
+if not exist "%STAGE%\install-prerequisites.ps1" (
+    echo [ERROR] Could not copy install-prerequisites.ps1.
     exit /b 1
 )
 if not exist "%STAGE%\setup.ps1" (

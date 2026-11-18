@@ -5,6 +5,8 @@ import java.time.Instant;
 public class Job {
     private String id;
     private Instant createdAt = Instant.now();
+    private Instant startedAt;
+    private Instant completedAt;
     private double cpuReq;
     private int ramReqMb;
     private String command;
@@ -40,6 +42,10 @@ public class Job {
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public Instant getStartedAt() { return startedAt; }
+    public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }
+    public Instant getCompletedAt() { return completedAt; }
+    public void setCompletedAt(Instant completedAt) { this.completedAt = completedAt; }
 
     public void setId(String id) {
         this.id = id;
@@ -84,6 +90,10 @@ public class Job {
 
     public void setStatus(JobStatus status) {
         this.status = status;
+        if (status == JobStatus.RUNNING && startedAt == null) startedAt = Instant.now();
+        if (status == JobStatus.DONE || status == JobStatus.FAILED || status == JobStatus.CANCELLED) {
+            completedAt = Instant.now();
+        }
     }
 
     public String getAssignedNode() {

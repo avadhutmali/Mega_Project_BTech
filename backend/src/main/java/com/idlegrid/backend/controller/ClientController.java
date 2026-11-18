@@ -216,18 +216,19 @@ public class ClientController {
         if (!configuredMasterUrl.isBlank()) return trimSlash(configuredMasterUrl);
         String scheme = request.getScheme();
         String host = request.getServerName();
-        int port = request.getServerPort();
+        int port = request.getLocalPort() > 0 ? request.getLocalPort() : request.getServerPort();
         try {
             InetAddress requestAddress = InetAddress.getByName(host);
             if (requestAddress.isLoopbackAddress() || requestAddress.isAnyLocalAddress()) {
                 try (DatagramSocket routeProbe = new DatagramSocket()) {
                     routeProbe.connect(InetAddress.getByName("api.jsonbin.io"), 443);
                     host = routeProbe.getLocalAddress().getHostAddress();
+                    scheme = "http";
                 }
             }
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Could not determine a network-reachable Master address for DDP workers.");
+                    "Could not determine a worker-reachable Master address for DDP workers. Configure rendezvous.master-url.");
         }
         String portPart = (("http".equalsIgnoreCase(scheme) && port == 80)
                 || ("https".equalsIgnoreCase(scheme) && port == 443)) ? "" : ":" + port;

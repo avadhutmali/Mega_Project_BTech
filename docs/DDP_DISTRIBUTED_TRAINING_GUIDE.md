@@ -169,6 +169,8 @@ torchrun \
   --node-rank=<rank> \
   --master-addr=<rank-0-agent-lan-ip> \
   --master-port=29500 \
+  --rdzv-conf=timeout=120 \
+  --tee=3 \
   --max-restarts=0 \
   train.py --epochs 2 --batch-size 32
 ```
@@ -178,6 +180,8 @@ torchrun \
 - `--node-rank` distinguishes each worker in the group.
 - `--master-addr` is the LAN IP of the Agent selected for rank zero, not the Spring Boot Master address.
 - `--master-port` is the PyTorch rendezvous port; all peers must be able to reach it.
+- `--rdzv-conf=timeout=120` gives all ranks up to two minutes to join. If they cannot, `torchrun` exits and its diagnostic output is reported with the failed worker. It does not limit a training job after rendezvous succeeds.
+- `--tee=3` forwards both worker stdout and stderr into the container logs so startup failures are visible in the run details.
 - `--max-restarts=0` means failed ranks are not restarted automatically.
 
 PyTorch's [torchrun documentation](https://docs.pytorch.org/docs/stable/elastic/run.html) describes the multi-node launcher and rank environment. The DDP API also requires initializing the process group before wrapping the model, and the user script is responsible for data sharding. For CPU workers, PyTorch's [distributed backend guidance](https://docs.pytorch.org/docs/stable/distributed.html) recommends Gloo.
@@ -278,6 +282,13 @@ A test may report closed before rank zero's process is listening. Check again wh
 After building the image and ensuring the bundle is in a mounted/current directory, `torchrun --standalone --nnodes=1 --nproc-per-node=2 train.py ...` can test the Python DDP script on one machine. This checks the model/data code, not IdleGrid gang placement or cross-PC networking.
 
 ## 11. Reading run status and troubleshooting
+
+For lab networks that block direct PC-to-PC traffic, the operator dashboard has a separate
+`/federated-training` route. It runs a coordinator-mediated FedAvg round: each worker uploads
+its local checkpoint to the Master over HTTP, and rank zero downloads and averages all
+updates. This is a different algorithm from DDP. The built-in demo bundle is available on
+that page; browser refresh restores the selected run, and the downloadable JSON report
+includes worker logs, timing, and metrics.
 
 | Symptom | Likely cause | What to check |
 |---|---|---|

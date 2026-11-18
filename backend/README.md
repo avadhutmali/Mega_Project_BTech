@@ -15,10 +15,13 @@ The backend:
 - Records completion, failure, result text, node address, and SSH port for jobs.
 - Keeps uploaded files on the Master and assigns up to two worker replicas when disk capacity allows.
 - Selects 2–3 worker nodes together for a DDP run, creates one child job per rank, stores the uploaded bundle, and accepts rank zero's artifact.
+- Provides a separate coordinator-mediated FedAvg workflow where worker checkpoints are relayed through the Master.
 - Publishes its reachable URL to a public JSONBin rendezvous bin on startup unless an explicit Master URL is configured.
 - Listens on UDP port **9091** for local Agent discovery requests.
 
 The backend does not run a submitted compute command locally. The Agent starts it inside Docker on the selected PC. For DDP, the backend coordinates jobs and file delivery; PyTorch/Gloo processes communicate directly among their worker PCs.
+
+The separate `/federated-training/runs` workflow supports networks that block peer traffic. Workers train locally and exchange model checkpoints only with the Master; rank zero performs sample-weighted FedAvg. The frontend serves a ready-to-run sample bundle at `/examples/idlegrid-fedavg-demo.zip`.
 
 ```mermaid
 flowchart LR
@@ -183,7 +186,7 @@ The full learning document is [DDP and Distributed Training](../docs/DDP_DISTRIB
 4. Validate that the requested entrypoint appears in the ZIP.
 5. Under `SchedulerService.coordinatePlacement`, select a complete group of online nodes with IPs, enough free CPU/RAM, and no active jobs. If a full group cannot be placed, reject the submission instead of starting only some ranks.
 6. Sort candidates by reported free CPU descending, pick rank zero as the coordinator, and create one already-assigned child `Job` for each rank. Each child asks for Docker host networking and the same selected image.
-7. Construct a `torchrun` command with `--nnodes`, `--nproc-per-node=1`, `--node-rank`, rank-zero `--master-addr`, port 29500, and `--max-restarts=0`. The container retrieves the same bundle from the Master; the Python script must shard samples itself, normally using `DistributedSampler`.
+7. Construct a `torchrun` command with `--nnodes`, `--nproc-per-node=1`, `--node-rank`, rank-zero `--master-addr`, port 29500, and `--max-restarts=0`. The rendezvous timeout is 120 seconds; when ranks cannot join, `torchrun` exits and its stdout/stderr are returned with the failed worker status. This bounds startup rendezvous, not the duration of successful training. Worker bundle/artifact URLs use the configured or browser-reachable Master URL. Bundle fetches time out after 60 seconds; the Python script must shard samples itself, normally using `DistributedSampler`.
 8. After `torchrun` exits successfully, rank zero verifies the expected output file exists and uploads it. The backend saves it under that run's `artifacts/` directory and serves it at the artifact endpoint.
 
 The Spring Master and PyTorch coordinator are different: the backend is the HTTP/control service on port 9090; rank zero is one Agent PC and is the Gloo/torchrun rendezvous host on TCP port 29500. Peer-to-peer reachability and Docker Desktop host networking are required.
@@ -293,6 +296,28 @@ Create body fields: `nodeId`, `requester`, `startAt`, `endAt`, `cpuReq`, `ramReq
 | `GET /distributed-training/runs/{runId}/artifact` | Dashboard/user | Download saved artifact or 404 |
 
 Submission multipart fields are `bundle`, `command`, `workers`, `cpuReq`, `ramReqMb`, `image`, and `outputFile`. The default output filename is `model.pt`.
+
+### Coordinator-mediated FedAvg
+
+| Method and route | Caller | Behavior |
+|---|---|---|
+| `POST /federated-training/runs` | Dashboard | Submit FedAvg bundle and reserve 2–3 workers |
+| `GET /federated-training/runs` | Dashboard | List current runs for refresh/history |
+| `GET /federated-training/runs/{runId}` | Dashboard | Return worker statuses, logs, and timing |
+| `GET /federated-training/runs/{runId}/bundle` | Worker container | Download submitted ZIP |
+| `POST /federated-training/runs/{runId}/updates/{rank}` | Worker container | Upload that worker's local checkpoint |
+| `GET /federated-training/runs/{runId}/updates-ready` | Rank-zero container | Wait for every worker update or report a failed worker |
+| `GET /federated-training/runs/{runId}/updates/{rank}` | Rank-zero container | Download each checkpoint for aggregation |
+| `POST /federated-training/runs/{runId}/artifact` | Rank-zero container | Upload the aggregated `model.pt` |
+| `GET /federated-training/runs/{runId}/artifact` | Dashboard | Download the aggregate model |
+| `GET /federated-training/runs/{runId}/report` | Dashboard | Download worker logs, metrics, and timing as JSON |
+
+The bundle must contain `fedavg_train.py`, `fedavg_merge.py`, and `data/<class-name>/*`.
+Each worker selects its data by `--rank` and `--world-size`, starts from the same seed,
+and emits a PyTorch state-dict checkpoint. Rank zero averages floating-point tensors
+weighted by each worker's sample count. Worker containers use bridge networking and contact
+only the Master; this mode does not use port 29500. Refresh reloads current runs from the
+Master API. Run metadata remains in memory for the lifetime of the backend process.
 
 ## 8. Configuration and startup
 

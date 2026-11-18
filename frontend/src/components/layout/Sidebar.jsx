@@ -1,4 +1,4 @@
-import { Activity, CalendarClock, Command, HardDrive, LayoutDashboard, TerminalSquare, Workflow, Brain } from 'lucide-react'
+import { Activity, CalendarClock, Command, HardDrive, LayoutDashboard, TerminalSquare, Workflow, Brain, Network } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const navigation = [
@@ -8,6 +8,7 @@ const navigation = [
   { to: '/jobs', label: 'Jobs', icon: TerminalSquare },
   { to: '/storage', label: 'Storage', icon: HardDrive },
   { to: '/training', label: 'Distributed training', icon: Brain },
+  { to: '/federated-training', label: 'Federated training', icon: Network },
 ]
 
 export default function Sidebar() {

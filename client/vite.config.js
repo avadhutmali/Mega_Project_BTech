@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
       port: 5174,
       proxy: {
         '/api': {
-          target: env.VITE_MASTER_URL || 'http://13.61.80.200:9090',
+          target: env.VITE_MASTER_URL || 'http://10.40.18.213:9090',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
         },

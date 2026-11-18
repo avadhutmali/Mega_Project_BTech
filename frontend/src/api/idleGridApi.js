@@ -63,4 +63,20 @@ export const idleGridApi = {
   getTrainingRun: (runId) => request(`/distributed-training/runs/${encodeURIComponent(runId)}`),
   getTrainingRuns: () => request('/distributed-training/runs'),
   trainingArtifactUrl: (runId) => `${API_BASE}/distributed-training/runs/${encodeURIComponent(runId)}/artifact`,
+  createFederatedRun: async ({ bundle, workers, cpuReq, ramReqMb, localEpochs, image }) => {
+    const body = new FormData()
+    body.append('bundle', bundle)
+    body.append('workers', String(workers))
+    body.append('cpuReq', String(cpuReq))
+    body.append('ramReqMb', String(ramReqMb))
+    body.append('localEpochs', String(localEpochs))
+    body.append('image', image)
+    const response = await fetch(`${API_BASE}/federated-training/runs`, { method: 'POST', body })
+    if (!response.ok) throw new Error((await response.text()) || `Could not start federated run (${response.status})`)
+    return response.json()
+  },
+  getFederatedRuns: () => request('/federated-training/runs'),
+  getFederatedRun: (runId) => request(`/federated-training/runs/${encodeURIComponent(runId)}`),
+  federatedArtifactUrl: (runId) => `${API_BASE}/federated-training/runs/${encodeURIComponent(runId)}/artifact`,
+  federatedReportUrl: (runId) => `${API_BASE}/federated-training/runs/${encodeURIComponent(runId)}/report`,
 }

@@ -1,6 +1,6 @@
 # IdleGrid
 
-IdleGrid is a campus-lab compute prototype. A Spring Boot Master tracks lab PCs, schedules containerized jobs, manages shared files with worker replicas, and coordinates CPU-first PyTorch DDP runs. Java Agents on Windows PCs report capacity and run Docker containers. Separate React apps provide operator monitoring and resource-limited student job access.
+IdleGrid is a campus-lab compute prototype. A Spring Boot Master tracks lab PCs, schedules containerized jobs, manages shared files with worker replicas, and offers CPU-first PyTorch DDP and coordinator-mediated FedAvg training. Java Agents on Windows PCs report capacity and run Docker containers. Separate React apps provide operator monitoring and resource-limited student job access.
 
 ## Project documentation
 
@@ -12,6 +12,7 @@ IdleGrid is a campus-lab compute prototype. A Spring Boot Master tracks lab PCs,
 - [Project motivation and roadmap context](docs/PROJECT_CONTEXT.md)
 - [PyTorch DDP learning guide](docs/DDP_DISTRIBUTED_TRAINING_GUIDE.md)
 - [PyTorch DDP example](examples/distributed-image-training/README.md)
+- [FedAvg demo bundle and workflow](examples/federated-image-training/README.md)
 
 ## Quick start
 
@@ -36,4 +37,4 @@ For the separate student dashboard, run `npm install && npm run dev` from `clien
 
 ## Current scope
 
-This is a prototype for a trusted lab network. Node/booking and active job/run control state are in memory. Student accounts, uploaded-file ownership, and per-user job/DDP history are stored on the Master filesystem; student sessions remain in memory. Student client APIs are account-scoped, while operator/dashboard and Agent APIs remain separate and are not protected by student login. Multi-node DDP needs direct TCP connectivity and an available worker image; a public GHCR package alone does not guarantee the required image tag has been published.
+This is a prototype for a trusted lab network. Node/booking and active job/run control state are in memory. Student accounts, uploaded-file ownership, and per-user job/DDP history are stored on the Master filesystem; student sessions remain in memory. Student client APIs are account-scoped, while operator/dashboard and Agent APIs remain separate and are not protected by student login. Multi-node DDP needs direct TCP connectivity; the separate FedAvg demo relays worker checkpoints through the Master over HTTP.

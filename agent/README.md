@@ -235,6 +235,27 @@ must initialize `torch.distributed`, wrap its model in DDP, use `DistributedSamp
 have rank zero save `model.pt` in the bundle directory. See
 `examples/distributed-image-training/train.py` for a starter pattern.
 
+### Coordinator-mediated FedAvg
+
+The operator dashboard also exposes `/federated-training`. This separate mode uses outbound
+HTTP to the Master and does not start a torchrun process group or require direct PC-to-PC
+connections. Each selected worker uploads a local checkpoint; rank zero downloads the updates
+through the Master and performs weighted averaging.
+
+Worker container requests:
+
+```text
+GET  /federated-training/runs/{runId}/bundle
+POST /federated-training/runs/{runId}/updates/{rank}
+GET  /federated-training/runs/{runId}/updates-ready
+GET  /federated-training/runs/{runId}/updates/{rank}
+POST /federated-training/runs/{runId}/artifact
+```
+
+The sample bundle is `frontend/public/examples/idlegrid-fedavg-demo.zip`. Its script splits
+data by rank, saves a PyTorch state dict and metrics, and `fedavg_merge.py` averages those
+checkpoints by sample count.
+
 ---
 
 ## Project layout

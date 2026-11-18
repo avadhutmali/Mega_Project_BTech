@@ -33,6 +33,8 @@ import java.util.zip.ZipInputStream;
 @Service
 public class DistributedTrainingService {
     private static final int MASTER_PORT = 29500;
+    /** Fail a DDP launch promptly if its required ranks cannot rendezvous. */
+    private static final int RENDEZVOUS_TIMEOUT_SECONDS = 120;
     private static final Pattern SAFE_COMMAND = Pattern.compile("^[A-Za-z0-9_./-]+(?:\\s+[A-Za-z0-9_./=,:-]+)*$");
     private static final Pattern SAFE_OUTPUT = Pattern.compile("^[A-Za-z0-9_.-]+$");
 
@@ -243,14 +245,17 @@ public class DistributedTrainingService {
         String output = "artifact=$(find /workspace/idlegrid-bundle -type f -name "
                 + shellQuote(run.getOutputFile()) + " -print -quit); test -n \"$artifact\"; ";
         return "set -eu; mkdir -p /workspace/idlegrid-bundle; "
-                + "curl -fsS " + shellQuote(bundleUrl) + " -o /workspace/idlegrid-bundle.zip; "
+                + "curl --connect-timeout 10 --max-time 60 -fsS " + shellQuote(bundleUrl)
+                + " -o /workspace/idlegrid-bundle.zip; "
                 + "unzip -oq /workspace/idlegrid-bundle.zip -d /workspace/idlegrid-bundle; "
                 + findEntrypoint
                 + "torchrun --nnodes=" + run.getWorkerCount() + " --nproc-per-node=1 --node-rank=" + rank
                 + " --master-addr=" + run.getCoordinatorIp() + " --master-port=" + run.getCoordinatorPort()
-                + " --max-restarts=0 \"$entrypoint\""
+                // Bound startup rendezvous only; once every rank joins, training may run longer.
+                // Tee both Python streams so failed starts carry actionable output to the Master.
+                + " --rdzv-conf=timeout=" + RENDEZVOUS_TIMEOUT_SECONDS + " --tee=3 --max-restarts=0 \"$entrypoint\""
                 + (arguments.isBlank() ? "" : " " + arguments) + "; "
-                + (rank == 0 ? output + "curl -fsS -F "
+                + (rank == 0 ? output + "curl --connect-timeout 10 --max-time 120 -fsS -F "
                 + shellQuote("file=@") + "\"$artifact\" "
                 + shellQuote(artifactUrl) + "; " : "");
     }

@@ -6,6 +6,7 @@ import TerminalPage from '../pages/TerminalPage'
 import BookingPage from '../pages/BookingPage'
 import StoragePage from '../pages/StoragePage'
 import DistributedTrainingPage from '../pages/DistributedTrainingPage'
+import FederatedTrainingPage from '../pages/FederatedTrainingPage'
 
 export default function AppRoutes() {
   return (
@@ -17,6 +18,7 @@ export default function AppRoutes() {
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/storage" element={<StoragePage />} />
         <Route path="/training" element={<DistributedTrainingPage />} />
+        <Route path="/federated-training" element={<FederatedTrainingPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

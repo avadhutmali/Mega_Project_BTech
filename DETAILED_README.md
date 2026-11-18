@@ -1,6 +1,6 @@
 # IdleGrid — Project and Technical Guide
 
-IdleGrid is a student-built distributed computing prototype for a campus computer lab. A Spring Boot **Master** tracks available lab PCs, accepts compute work, and assigns it to **Agents** installed on the PCs. Agents run the work in Docker containers with CPU and memory limits. The web dashboard shows cluster capacity, submits jobs, manages shared files, and provides a separate multi-node PyTorch DistributedDataParallel (DDP) training workflow.
+IdleGrid is a student-built distributed computing prototype for a campus computer lab. A Spring Boot **Master** tracks available lab PCs, accepts compute work, and assigns it to **Agents** installed on the PCs. Agents run the work in Docker containers with CPU and memory limits. The web dashboard shows cluster capacity, submits jobs, manages shared files, and provides separate PyTorch DDP and coordinator-mediated FedAvg training workflows.
 
 This document describes the implementation in this repository, including its current boundaries. It is intended as a technical reference for the project report, demonstration, and presentation. Features described as future work are not represented as already implemented.
 
@@ -15,11 +15,11 @@ This document describes the implementation in this repository, including its cur
 | Public landing page | Separate React/Vite site that serves the Windows Agent ZIP |
 | Node/booking/run control data | Mostly in-memory Java stores; student job and DDP history is persisted per account |
 | Shared files | Master filesystem plus JSON index and up to two worker replicas; student file metadata is owned by its uploader |
-| Scheduling | First-fit for ordinary work; atomic 2–3 node placement for DDP runs |
+| Scheduling | First-fit for ordinary work; atomic 2–3 node placement for DDP and FedAvg runs |
 | Discovery | JSONBin rendezvous first, then UDP discovery and local-subnet scan fallback |
 | Security scope | Trusted-lab prototype; student `/client/**` APIs have account sessions and per-user history/ownership, while operator and Agent APIs remain unauthenticated |
 
-The code is organized as a **centralized Master with worker Agents**, rather than a decentralized or gossip-based scheduler. DDP uses PyTorch's Gloo backend over TCP and requires direct peer reachability between selected PCs.
+The code is organized as a **centralized Master with worker Agents**, rather than a decentralized or gossip-based scheduler. DDP uses PyTorch's Gloo backend over TCP and requires direct peer reachability between selected PCs. The FedAvg demo relays checkpoints through the Master over HTTP, so workers do not need peer-to-peer access.
 
 ## 2. Motivation and goals
 
@@ -32,7 +32,7 @@ The implemented demonstration focuses on these outcomes:
 3. Users submit containerized commands with CPU and memory requests; the Master queues and places work.
 4. Agents pull assignments, start Docker containers, capture output, and report completion.
 5. Users can upload a shared file, receive a random access key, and retrieve that file later.
-6. A separate training page can launch a DDP-aware image-classification script across 2–3 lab PCs and offer rank zero's model artifact.
+6. Separate training pages can launch DDP across 2–3 lab PCs or run coordinator-mediated FedAvg and offer a combined model artifact and timing report.
 
 The broader design context and research motivation are in [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md). That document includes ideas and a roadmap that go beyond the implementation described here; PostgreSQL, MinIO, DRF, checkpointing, and a decentralized scheduler are not current components.
 
@@ -52,6 +52,9 @@ flowchart LR
     Browser -->|multipart DDP bundle| Master
     Agent1 <-->|Gloo TCP gradients| Agent2
     Agent1 -->|rank 0 model artifact| Master
+    Browser -->|multipart FedAvg bundle| Master
+    Agent1 -->|local checkpoint upload/download| Master
+    Agent2 -->|local checkpoint upload/download| Master
     Public[Public landing page] -->|downloads Agent ZIP| Browser
 ```
 
@@ -69,7 +72,7 @@ The current distributable is a portable Windows ZIP containing the Agent JAR, la
 
 ### 3.3 Dashboards and public site
 
-The internal dashboard is the operational UI, with routes for overview, booking, terminal-style command submission, jobs, shared storage, and distributed training. In development, Vite proxies `/api` to the Master (default `http://localhost:9090`). For a production build, set `VITE_MASTER_URL` to the Master address reachable by the users' browsers.
+The internal dashboard is the operational UI, with routes for overview, booking, terminal-style command submission, jobs, shared storage, DDP training, and coordinator-mediated FedAvg training. In development, Vite proxies `/api` to the Master (default `http://localhost:9090`). For a production build, set `VITE_MASTER_URL` to the Master address reachable by the users' browsers.
 
 The separate student dashboard in `client/` offers account registration/sign-in, live capacity, terminal jobs, private file storage, and DDP training. Students can request resources using the same scheduler capacity as the operator dashboard; there are no extra per-student CPU/RAM caps. Job/DDP histories and file ownership are stored per account. The public landing page is a simple download and onboarding site; it is not either dashboard and does not proxy API requests.
 
@@ -114,6 +117,12 @@ The separate training workflow is CPU-first PyTorch DDP:
 **IdleGrid does not split the uploaded ZIP into separate physical data files.** Each rank receives the same bundle. The training script performs sample-level partitioning. DDP combines training through synchronized gradient updates, rather than a later merge of independent model files.
 
 The repository example is [`examples/distributed-image-training/train.py`](examples/distributed-image-training/train.py). A ready-to-upload synthetic dataset bundle is [`examples/distributed-image-training/idlegrid-ddp-image-demo.zip`](examples/distributed-image-training/idlegrid-ddp-image-demo.zip); it contains circles, squares, and triangles for a small demonstration, not real-world recognition data. For a step-by-step explanation of the distributed algorithm and this project's launch path, see the [PyTorch DDP and IdleGrid guide](docs/DDP_DISTRIBUTED_TRAINING_GUIDE.md).
+
+### 4.7 Coordinator-mediated FedAvg training
+
+The separate `/federated-training` page is designed for lab networks where peer TCP is blocked. Each worker downloads the same sample ZIP over HTTP, selects its deterministic rank-based data shard, initializes the same small image classifier, and trains locally. Workers upload their state dictionaries and sample counts to the Master. Rank zero downloads the updates, computes a sample-weighted parameter average, and uploads the combined `model.pt`.
+
+This is a one-round FedAvg demonstration rather than DDP. It uses the existing CPU PyTorch image and Master HTTP service, but its bundle contract is explicit: `fedavg_train.py`, `fedavg_merge.py`, and `data/<class-name>/*`. The page includes a ready-to-run circle/square/triangle dataset. Run history reloads after browser refresh while the Master process remains running; the report JSON includes worker logs, per-worker timestamps/runtime, total elapsed time, and sample-level loss/accuracy output.
 
 ## 5. Main user workflows
 

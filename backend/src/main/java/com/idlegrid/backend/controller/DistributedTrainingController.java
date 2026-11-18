@@ -48,23 +48,28 @@ public class DistributedTrainingController {
             @RequestParam(defaultValue = "ghcr.io/avadhutmali/idlegrid-pytorch-cpu@sha256:74e60bc071f7349b0f7d9656f2105d7238152133e52dc71377b08eaa51883221") String image,
             @RequestParam(defaultValue = "model.pt") String outputFile,
             HttpServletRequest request) {
-        String scheme = request.getScheme();
-        String host = request.getServerName();
-        int port = request.getServerPort();
         if (!configuredMasterUrl.isBlank()) return training.submit(bundle, command, workers, cpuReq, ramReqMb,
                 image, outputFile, trimSlash(configuredMasterUrl));
+        // Use the same worker-reachable URL the browser used. For an AWS-hosted
+        // Master this must be its public DNS/IP; the EC2 private address is not
+        // reachable from campus lab PCs. For local development, replace loopback
+        // with the interface selected by the OS route.
+        String scheme = request.getScheme();
+        String host = request.getServerName();
+        int port = request.getLocalPort() > 0 ? request.getLocalPort() : request.getServerPort();
         try {
             InetAddress requestAddress = InetAddress.getByName(host);
             if (requestAddress.isLoopbackAddress() || requestAddress.isAnyLocalAddress()) {
                 try (DatagramSocket routeProbe = new DatagramSocket()) {
                     routeProbe.connect(InetAddress.getByName("api.jsonbin.io"), 443);
                     host = routeProbe.getLocalAddress().getHostAddress();
+                    scheme = "http";
                 }
             }
         } catch (Exception e) {
             throw new org.springframework.web.server.ResponseStatusException(
                     org.springframework.http.HttpStatus.BAD_REQUEST,
-                    "Could not determine a network-reachable Master address for DDP workers.");
+                    "Could not determine a worker-reachable Master address for DDP workers. Configure rendezvous.master-url.");
         }
         String masterUrl = scheme + "://" + host
                 + (("http".equalsIgnoreCase(scheme) && port == 80)

@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
   // loadEnv reads .env, .env.local, .env.[mode], .env.[mode].local — highest priority last.
   const env = loadEnv(mode, process.cwd(), '')
 
-  const masterUrl = env.VITE_MASTER_URL || 'http://localhost:9090'
+  const masterUrl = env.VITE_MASTER_URL || 'http://13.61.80.200:9090'
 
   return {
     plugins: [react()],

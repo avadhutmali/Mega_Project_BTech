@@ -236,7 +236,10 @@ public class DistributedTrainingService {
         String arguments = command.trim().substring(entrypoint.length()).trim();
         String findEntrypoint = "entrypoint=$(find /workspace/idlegrid-bundle -type f -name "
                 + shellQuote(entrypointName) + " -print -quit); test -n \"$entrypoint\"; "
-                + "cd \"$(dirname \"$entrypoint\")\"; ";
+                // Keep the bundle root as cwd and pass the discovered script by its
+                // absolute path. This avoids nested command-substitution quoting in
+                // `sh -c`, which breaks on some Windows Docker CLI argument paths.
+                + "cd /workspace/idlegrid-bundle; ";
         String output = "artifact=$(find /workspace/idlegrid-bundle -type f -name "
                 + shellQuote(run.getOutputFile()) + " -print -quit); test -n \"$artifact\"; ";
         return "set -eu; mkdir -p /workspace/idlegrid-bundle; "
@@ -245,7 +248,7 @@ public class DistributedTrainingService {
                 + findEntrypoint
                 + "torchrun --nnodes=" + run.getWorkerCount() + " --nproc-per-node=1 --node-rank=" + rank
                 + " --master-addr=" + run.getCoordinatorIp() + " --master-port=" + run.getCoordinatorPort()
-                + " --max-restarts=0 " + shellQuote(entrypointName)
+                + " --max-restarts=0 \"$entrypoint\""
                 + (arguments.isBlank() ? "" : " " + arguments) + "; "
                 + (rank == 0 ? output + "curl -fsS -F "
                 + shellQuote("file=@") + "\"$artifact\" "

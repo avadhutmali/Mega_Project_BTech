@@ -6,7 +6,7 @@
 #   1. Install/enable WSL2 without an unnecessary Linux distribution
 #   2. Install Docker Desktop with winget (official installer fallback)
 #   3. Configure Docker Desktop (WSL2 backend, sensible resource limits)
-#   4. Check / prompt for Java 17+
+#   4. Install Java 17+ with winget when it is missing
 #   5. Verify everything is working
 #
 # Usage (in an Administrator PowerShell):
@@ -124,7 +124,9 @@ if ($rebootNeeded) {
     if ($choice -match "^[Yy]") {
         Restart-Computer -Force
     }
-    exit 0
+    # MSI-standard reboot-required exit code; run-agent.bat uses it to avoid
+    # launching the Agent before WSL has finished initializing after reboot.
+    exit 3010
 }
 
 # =============================================================================
@@ -320,12 +322,35 @@ try {
 }
 
 if (-not $javaOk) {
-    Write-Host ""
-    Write-Host "  Java 17+ is required to run the IdleGrid agent." -ForegroundColor Yellow
-    Write-Host "  Install it with winget (run in Administrator PowerShell):" -ForegroundColor Yellow
-    Write-Host "    winget install Microsoft.OpenJDK.17" -ForegroundColor White
-    Write-Host "  Or download from: https://adoptium.net/temurin/releases/?version=17" -ForegroundColor White
-    Write-Host "  After installing Java, re-run this script to verify." -ForegroundColor Yellow
+    $wingetCommand = Get-Command winget -ErrorAction SilentlyContinue
+    if ($wingetCommand) {
+        Write-Info "Installing Java 17 with winget..."
+        try {
+            & $wingetCommand.Source install -e --id Microsoft.OpenJDK.17 `
+                --accept-package-agreements --accept-source-agreements --silent
+            if ($LASTEXITCODE -eq 0) {
+                $Env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" +
+                            [System.Environment]::GetEnvironmentVariable("PATH","User")
+                $javaVer = java -version 2>&1 | Select-Object -First 1
+                if ($javaVer -match '"(\d+)') {
+                    $major = [int]$Matches[1]
+                    if ($major -ge 17) {
+                        Write-Ok "Installed and verified Java $major"
+                        $javaOk = $true
+                    }
+                }
+            }
+        } catch {
+            Write-Warn "Automatic Java installation failed: $_"
+        }
+    }
+    if (-not $javaOk) {
+        Write-Host ""
+        Write-Host "  Java 17+ is required to run the IdleGrid agent." -ForegroundColor Yellow
+        Write-Host "  Install with: winget install -e --id Microsoft.OpenJDK.17" -ForegroundColor White
+        Write-Host "  Or download from: https://adoptium.net/temurin/releases/?version=17" -ForegroundColor White
+        Write-Host "  Then run run-agent.bat again." -ForegroundColor Yellow
+    }
 }
 
 # =============================================================================

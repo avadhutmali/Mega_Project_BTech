@@ -120,11 +120,10 @@ The repository example is [`examples/distributed-image-training/train.py`](examp
 ### 5.1 Join a PC to the grid
 
 1. Download and extract the Agent ZIP from the public landing page.
-2. Install Java 17+ and Docker Desktop with its WSL2 backend.
-3. If needed, run `setup.ps1` as Administrator to prepare WSL2/Docker Desktop settings.
-4. Make sure the Master is running and reachable on TCP port 9090.
-5. Leave `master.url=auto` in `agent.properties` for automatic discovery, or set `master.url=http://<master-ip>:9090` manually.
-6. Start `run-agent.bat`. Check the Agent log and the dashboard for its heartbeat.
+2. Make sure the Master is running and reachable on TCP port 9090.
+3. Leave `master.url=auto` in `agent.properties` for automatic discovery, or set `master.url=http://<master-ip>:9090` manually.
+4. Double-click `run-agent.bat`. It starts the Agent directly when Java 17+, Docker, and Docker auto-start are ready; otherwise it requests Administrator permission to install/configure prerequisites.
+5. If setup requests a reboot for WSL2, restart Windows and double-click `run-agent.bat` again. Check the Agent log and dashboard for its heartbeat.
 
 Auto-discovery tries the public JSONBin rendezvous record first. The Master updates the public bin with the URL derived from its routed LAN address unless `rendezvous.master-url` is configured. If rendezvous lookup fails, the Agent falls back to UDP discovery on port 9091 and then a local `/24` TCP scan. UDP broadcast and subnet scans can be blocked by VLANs or Wi-Fi client isolation; manual `master.url` is the fallback.
 
@@ -322,13 +321,13 @@ Open `http://localhost:5173`. By default, the Vite `/api` proxy targets `http://
 
 ### 8.3 Start an Agent
 
-Requires Java 17+ and Docker Desktop running with WSL2. Extract the portable ZIP and run `run-agent.bat`. To manually set the Master, edit the extracted `agent.properties` next to the launcher and set:
+Extract the portable ZIP and double-click `run-agent.bat`. It installs Java 17+, WSL2, and Docker Desktop when needed, configures Docker to start at Windows sign-in, then starts the Agent. To manually set the Master, edit the extracted `agent.properties` next to the launcher and set:
 
 ```properties
 master.url=http://<master-pc-ip>:9090
 ```
 
-For the Windows setup helper, run `setup.ps1` in an elevated PowerShell session only after reviewing what it changes. It enables/configures WSL and Docker Desktop settings. Restart/reboot may be necessary for Windows features or Docker settings to take effect.
+The launcher elevates only the prerequisite setup. The Agent process runs in the original user session. Docker Desktop auto-start is tied to that Windows user's sign-in, not an always-on pre-login service.
 
 ### 8.4 Pull the pinned DDP worker image
 

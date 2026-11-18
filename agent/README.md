@@ -18,8 +18,9 @@ and executing assigned jobs inside a resource-capped Docker container.
 3. Double-click `run-agent.bat` and keep its window open.
 
 The ZIP contains the standalone fat JAR, launcher, configuration, quick-start guide,
-and `setup.ps1`. Install Java 17+ and Docker Desktop first; `setup.ps1` can help prepare
-WSL2 and Docker on a lab PC.
+and prerequisite setup script. Double-click `run-agent.bat`; it installs missing Java,
+WSL2, and Docker prerequisites, then starts the Agent. If everything is ready, it starts
+the Agent directly without rerunning setup.
 
 ---
 
@@ -27,9 +28,9 @@ WSL2 and Docker on a lab PC.
 
 ### Prerequisites (per lab PC — run `setup.ps1` once)
 
-> **The easiest way:** run `setup.ps1` (included in the ZIP) as Administrator. It enables
-> WSL2, installs Docker Desktop with `winget` when available (official installer fallback),
-> and configures Docker Desktop to start when the signed-in Windows user logs in.
+> **The easiest way:** double-click `run-agent.bat`. It checks prerequisites, requests
+> Administrator permission to install/configure missing components, and launches the Agent.
+> If everything is already ready, it skips setup and starts the Agent directly.
 
 ```powershell
 # In an Administrator PowerShell, from the extracted IdleGridAgent folder:
@@ -37,14 +38,14 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 .\setup.ps1
 ```
 
-`setup.ps1` will:
+When needed, `setup.ps1` will:
 - ✅ Install/update WSL without adding an unused Linux distribution and enable required Windows features
 - ✅ Install Docker Desktop using `winget install -e --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements` (official installer fallback if winget is unavailable)
 - ✅ Configure Docker Desktop (WSL2 backend, resource limits, auto-start)
-- ✅ Check Java 17+ is installed (with install instructions if missing)
+- ✅ Install Java 17 through winget when missing
 - ✅ Run a container smoke test to confirm everything works
 
-> A **reboot** may be required after WSL2 features are installed. Re-run `setup.ps1` after rebooting.
+> A **reboot** may be required after WSL2 features are installed. Restart the PC and double-click `run-agent.bat` again.
 > Docker Desktop auto-starts when the Windows account used for setup signs in. This is
 > application auto-start, not a Windows background service available before sign-in.
 

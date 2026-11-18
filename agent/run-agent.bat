@@ -82,12 +82,14 @@ if "%JAVA_EXE%"=="java" (
     where java >nul 2>nul
     if errorlevel 1 exit /b 0
 )
-if not exist "%~dp0runtime\bin\java.exe" (
-    for /f "tokens=3" %%V in ('java -version 2^>^&1') do if not defined JAVA_VERSION set "JAVA_VERSION=%%~V"
-    if not defined JAVA_VERSION exit /b 0
-    for /f "tokens=1 delims=." %%M in ("%JAVA_VERSION%") do set "JAVA_MAJOR=%%M"
-    if %JAVA_MAJOR% LSS 17 exit /b 0
-)
+if exist "%~dp0runtime\bin\java.exe" goto CHECK_DOCKER
+for /f "tokens=3" %%V in ('java -version 2^>^&1') do if not defined JAVA_VERSION set "JAVA_VERSION=%%~V"
+if not defined JAVA_VERSION exit /b 0
+for /f "tokens=1 delims=." %%M in ("%JAVA_VERSION%") do set "JAVA_MAJOR=%%M"
+call :JAVA_VERSION_OK
+if errorlevel 1 exit /b 0
+
+:CHECK_DOCKER
 where docker >nul 2>nul
 if errorlevel 1 (
     if not exist "%ProgramFiles%\Docker\Docker\resources\bin\docker.exe" exit /b 0
@@ -109,4 +111,8 @@ for /l %%I in (1,1,12) do (
     )
     timeout /t 5 /nobreak >nul
 )
+exit /b 0
+
+:JAVA_VERSION_OK
+if %JAVA_MAJOR% LSS 17 exit /b 1
 exit /b 0

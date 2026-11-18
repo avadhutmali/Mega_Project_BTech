@@ -75,6 +75,9 @@ public class SchedulerService {
                     if (job.getDistributedTrainingRunId() != null) {
                         job.setStatus(JobStatus.FAILED);
                         job.setResult("Distributed training worker went offline; the DDP group cannot continue.");
+                    } else if (job.isCancelRequested()) {
+                        job.setStatus(JobStatus.CANCELLED);
+                        job.setResult("Session released while its worker went offline.");
                     } else {
                         job.setStatus(JobStatus.QUEUED);
                         job.setAssignedNode(null);

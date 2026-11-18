@@ -121,6 +121,7 @@ call blocks briefly.
 | **Heartbeat** | 3 s (default) | `POST /nodes/heartbeat` with nodeId, ip, cpuTotal, cpuFree (core equivalents), RAM totals/free, and idleState |
 | **Idle check** | 10 s (default) | Calls `GetLastInputInfo` (JNA) + `query user`; transitions NodeState ACTIVE ↔ IDLE |
 | **Job poll** | 5 s (default) | `GET /agent/{nodeId}/assignment`; on 200, starts docker container |
+| **Release check** | 5 s (same poll loop) | While a job runs, checks for a dashboard cancellation request and stops the container |
 | **Container watchdog** | 15 s | `docker inspect` on running container; triggers FAILED report if container vanishes |
 | **Storage poll** | 5 s | Pulls assigned file replicas into the node's `storage/` directory |
 
@@ -197,6 +198,7 @@ zombie containers consuming CPU/RAM without the Master knowing.
 |--------|------|-----------|---------|
 | POST | `/nodes/heartbeat` | Agent → Master | Register / refresh CPU, RAM, and storage capacity every 3 s |
 | GET | `/agent/{nodeId}/assignment` | Agent → Master | Poll for assigned job |
+| GET | `/agent/{nodeId}/jobs/{jobId}/cancel-requested` | Agent → Master | Check whether the user requested session release |
 | POST | `/jobs/{id}/complete` | Agent → Master | Report success or failure |
 | GET | `/distributed-training/runs/{runId}/bundle` | Agent container → Master | Download the shared DDP bundle |
 | POST | `/distributed-training/runs/{runId}/artifact` | Rank zero container → Master | Upload the final checkpoint |
@@ -206,6 +208,9 @@ zombie containers consuming CPU/RAM without the Master knowing.
 
 The backend implements the assignment endpoint. After a container starts, the agent
 also reports `POST /jobs/{id}/running` with the mapped SSH port and node ID.
+When a session owner requests release, the dashboard calls `POST /jobs/{id}/cancel`.
+The Agent observes the request on its next poll, stops the container, and reports the
+final state. The node becomes available after that confirmation.
 
 For shared files, the agent polls `GET /agent/{nodeId}/storage/assignment`, downloads
 the selected file from the Master, stores it under its configured storage directory,

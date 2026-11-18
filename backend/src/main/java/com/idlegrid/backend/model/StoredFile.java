@@ -10,16 +10,21 @@ public class StoredFile {
     private String fileName;
     private String contentType;
     private long sizeBytes;
+    private String ownerUsername;
     private Instant createdAt;
     private String status;
     private List<String> replicaNodeIds = new ArrayList<>();
 
     public StoredFile() {}
     public StoredFile(String key, String fileName, String contentType, long sizeBytes) {
+        this(key, fileName, contentType, sizeBytes, null);
+    }
+    public StoredFile(String key, String fileName, String contentType, long sizeBytes, String ownerUsername) {
         this.key = key;
         this.fileName = fileName;
         this.contentType = contentType;
         this.sizeBytes = sizeBytes;
+        this.ownerUsername = ownerUsername;
         this.createdAt = Instant.now();
         this.status = "REPLICATING";
     }
@@ -31,6 +36,8 @@ public class StoredFile {
     public void setContentType(String contentType) { this.contentType = contentType; }
     public long getSizeBytes() { return sizeBytes; }
     public void setSizeBytes(long sizeBytes) { this.sizeBytes = sizeBytes; }
+    public String getOwnerUsername() { return ownerUsername; }
+    public void setOwnerUsername(String ownerUsername) { this.ownerUsername = ownerUsername; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public String getStatus() { return status; }

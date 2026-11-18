@@ -14,7 +14,8 @@ degrading the owner's experience. Full rationale and citations: `docs/PROJECT_CO
 
 A stripped-down proof-of-concept, requested explicitly by the project guide:
 
-- No auth. No database (in-memory control state in `backend/` is fine).
+- No database (in-memory control state in `backend/` is fine). Student accounts are file-backed salted hashes with in-memory sessions/job ownership; do not expand this into a production identity system without a new request.
+- **`client/`** — a student-facing dashboard separate from the operator frontend. It can view live node capacity, submit jobs with user-selected resources, view that account's terminal/job/DDP history and owned files, and release its own active jobs. It must use the authenticated `/client/**` API and must not expose operator controls.
 - **`backend/`** — a Master service: tracks which of 3 lab PCs are online and how much
   CPU, RAM, and disk capacity each has free, accepts job submissions, assigns jobs to nodes
   (first-fit is enough), and manages shared files with a persistent local index and worker replicas.
@@ -26,10 +27,9 @@ A stripped-down proof-of-concept, requested explicitly by the project guide:
 
 ## What NOT to build yet
 
-Do not add authentication, MinIO, fairness scheduling (DRF), job checkpointing, or a
-decentralized/gossip protocol. These remain future work. Shared file storage for this milestone
-uses the Master filesystem plus up to two worker replicas, with a JSON metadata index rather
-than a database.
+Do not expand the student login into a production identity system. MinIO, fairness scheduling
+(DRF), job checkpointing, and a decentralized/gossip protocol remain future work. Shared file
+storage uses the Master filesystem plus up to two worker replicas, with a JSON metadata index.
 
 ## API contract between backend and agent (Phase 1)
 
@@ -38,8 +38,20 @@ POST /nodes/heartbeat        agent -> backend, reports node id + free capacity
 POST /jobs/submit            (test client) -> backend, submits a job {cpu, ram, command}
 GET  /jobs/{id}/status       -> backend, poll job state
 POST /jobs/{id}/complete     agent -> backend, reports job result
+POST /client/auth/login     student client -> backend, signs in using a configured account
+GET  /client/nodes           student client -> backend, returns lab capacity summary
+GET  /client/jobs            student client -> backend, lists only the signed-in student's jobs
+POST /client/jobs            student client -> backend, submits a resource-limited job
+POST /client/jobs/{id}/cancel student client -> backend, releases an owned job
+GET  /client/storage/files   student client -> backend, lists only the student's uploads
+POST /client/storage/files   student client -> backend, uploads a file owned by the student
+GET  /client/storage/files/{key}/content student client -> backend, downloads an owned file
+POST /client/training/runs   student client -> backend, submits a DDP run under the student's account
+GET  /client/training/runs   student client -> backend, lists the student's persisted DDP history
+POST /jobs/{id}/cancel       dashboard -> backend, cancels a queued job or requests running-session release
+GET /agent/{nodeId}/jobs/{jobId}/cancel-requested -> agent -> backend, checks for a release request
 POST /storage/files          dashboard -> backend, uploads a file and returns its access key
-GET  /storage/files/{key}/content -> dashboard/client -> backend, downloads by access key
+GET  /storage/files/{key}/content -> operator dashboard -> backend, downloads by access key
 GET  /agent/{nodeId}/storage/assignment -> agent -> backend, pulls a file replica task
 POST /agent/{nodeId}/storage/{key}/complete -> agent -> backend, acknowledges the replica
 ```

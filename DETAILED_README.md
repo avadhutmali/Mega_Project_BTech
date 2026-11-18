@@ -11,13 +11,13 @@ This document describes the implementation in this repository, including its cur
 | Master/backend | Java 17, Spring Boot 3.3.4, REST API on port 9090 |
 | Agent | Java 17 background process; packaged for Windows as a portable ZIP |
 | Worker runtime | Docker Desktop using its WSL2 backend; jobs run in Linux containers |
-| Dashboard | React 18, Vite, Tailwind CSS; development server on port 5173 |
+| Operator dashboard and student client | Separate React 18/Vite/Tailwind apps; development servers on ports 5173 and 5174 |
 | Public landing page | Separate React/Vite site that serves the Windows Agent ZIP |
-| Node/job/booking/run control data | In-memory Java stores; restart clears this control state |
-| Shared files | Master filesystem plus JSON index and up to two worker replicas |
+| Node/booking/run control data | Mostly in-memory Java stores; student job and DDP history is persisted per account |
+| Shared files | Master filesystem plus JSON index and up to two worker replicas; student file metadata is owned by its uploader |
 | Scheduling | First-fit for ordinary work; atomic 2–3 node placement for DDP runs |
 | Discovery | JSONBin rendezvous first, then UDP discovery and local-subnet scan fallback |
-| Security scope | Prototype for a trusted lab network; no authentication or authorization layer |
+| Security scope | Trusted-lab prototype; student `/client/**` APIs have account sessions and per-user history/ownership, while operator and Agent APIs remain unauthenticated |
 
 The code is organized as a **centralized Master with worker Agents**, rather than a decentralized or gossip-based scheduler. DDP uses PyTorch's Gloo backend over TCP and requires direct peer reachability between selected PCs.
 
@@ -67,11 +67,11 @@ An Agent runs on each worker PC. It has scheduled loops for heartbeats, job poll
 
 The current distributable is a portable Windows ZIP containing the Agent JAR, launcher, configuration, setup script, quick-start guide, and training-worker Dockerfile. The public landing page provides that ZIP. It does not currently provide a built-in Agent image or a guaranteed prebuilt PyTorch image inside the ZIP.
 
-### 3.3 Dashboard and public site
+### 3.3 Dashboards and public site
 
 The internal dashboard is the operational UI, with routes for overview, booking, terminal-style command submission, jobs, shared storage, and distributed training. In development, Vite proxies `/api` to the Master (default `http://localhost:9090`). For a production build, set `VITE_MASTER_URL` to the Master address reachable by the users' browsers.
 
-The separate public landing page is a simple download and onboarding site. It is not the internal dashboard and does not proxy API requests.
+The separate student dashboard in `client/` offers account registration/sign-in, live capacity, terminal jobs, private file storage, and DDP training. Students can request resources using the same scheduler capacity as the operator dashboard; there are no extra per-student CPU/RAM caps. Job/DDP histories and file ownership are stored per account. The public landing page is a simple download and onboarding site; it is not either dashboard and does not proxy API requests.
 
 ## 4. Important implementation choices
 
@@ -99,7 +99,7 @@ Ordinary containers use Docker's default bridge networking and publish exposed p
 
 An upload is first stored on the Master and indexed by a random UUID access key. When online worker disks have capacity, the Master queues up to two replicas. Agents poll for tasks, download the bytes from the Master, write them under their local storage directory, and acknowledge completion. The Master tracks replica node IDs and reduces its reported free disk capacity when a replica is recorded.
 
-The shared-storage dashboard displays online worker disk capacity, Master disk capacity, files, status, and replica counts. A file's random key is a bearer capability: anyone who has the key can download the content. There is no user account ownership or per-user quota in this version.
+The shared-storage dashboard displays online worker disk capacity, Master disk capacity, files, status, and replica counts. Student uploads record their owner in the persistent file index; authenticated student endpoints list and download only that user's files. The operator dashboard continues to list all files. A random file key remains a bearer capability if deliberately shared.
 
 ### 4.6 DDP training model
 
@@ -113,7 +113,7 @@ The separate training workflow is CPU-first PyTorch DDP:
 
 **IdleGrid does not split the uploaded ZIP into separate physical data files.** Each rank receives the same bundle. The training script performs sample-level partitioning. DDP combines training through synchronized gradient updates, rather than a later merge of independent model files.
 
-The repository example is [`examples/distributed-image-training/train.py`](examples/distributed-image-training/train.py). A ready-to-upload synthetic dataset bundle is [`examples/distributed-image-training/idlegrid-ddp-image-demo.zip`](examples/distributed-image-training/idlegrid-ddp-image-demo.zip); it contains circles, squares, and triangles for a small demonstration, not real-world recognition data.
+The repository example is [`examples/distributed-image-training/train.py`](examples/distributed-image-training/train.py). A ready-to-upload synthetic dataset bundle is [`examples/distributed-image-training/idlegrid-ddp-image-demo.zip`](examples/distributed-image-training/idlegrid-ddp-image-demo.zip); it contains circles, squares, and triangles for a small demonstration, not real-world recognition data. For a step-by-step explanation of the distributed algorithm and this project's launch path, see the [PyTorch DDP and IdleGrid guide](docs/DDP_DISTRIBUTED_TRAINING_GUIDE.md).
 
 ## 5. Main user workflows
 
@@ -172,7 +172,7 @@ Select 2 or 3 workers and set per-PC CPU/RAM requests. All selected nodes need t
 
 ## 6. REST API reference
 
-All endpoints are served by the Master on port 9090. There is no authentication middleware. JSON examples are schematic; Java record fields and defaults in the code are authoritative.
+All endpoints are served by the Master on port 9090. The student API under `/client/**` requires a configured account and bearer session token. Operator/dashboard and Agent routes remain unauthenticated in this trusted-network prototype. JSON examples are schematic; Java record fields and defaults in the code are authoritative.
 
 ### 6.1 Nodes
 
@@ -190,9 +190,11 @@ Heartbeat body fields: `nodeId`, `ip`, `sshCommand`, `cpuTotal`, `cpuFree`, `ram
 | `POST /jobs/submit` | Dashboard/test client | Create a job and immediately attempt scheduling |
 | `GET /jobs` | Dashboard | List jobs |
 | `GET /jobs/{id}/status` | Dashboard | Read one job's status and result |
+| `POST /jobs/{id}/cancel` | Dashboard | Cancel queued/assigned work or request release of a running session |
 | `POST /jobs/{id}/running` | Agent | Report a started container and SSH port |
 | `POST /jobs/{id}/complete` | Agent | Report result and success/failure |
 | `GET /agent/{nodeId}/assignment` | Agent | Pull the next assignment; `204` means none |
+| `GET /agent/{nodeId}/jobs/{jobId}/cancel-requested` | Agent | Poll for a user-requested session release |
 
 Job submit body:
 
@@ -241,7 +243,7 @@ Booking fields: `nodeId`, `requester`, `startAt`, `endAt`, `cpuReq`, and `ramReq
 | `POST /distributed-training/runs/{runId}/artifact` | Rank zero container | Multipart `file` upload of final model |
 | `GET /distributed-training/runs/{runId}/artifact` | Dashboard/user | Download completed artifact |
 
-Submission currently supports 2–3 workers, positive CPU requests, at least 512 MB RAM per worker, a Python entrypoint, and a safe output filename such as `model.pt`. The upload is capped at 100 MB by Spring; the ZIP validator caps expanded data at 1 GB and rejects unsafe paths and very large entry counts. Runs and bundles are held on the Master filesystem (temp directory by default), while run/job control state remains in memory.
+Submission currently supports 2–3 workers, positive CPU requests, at least 512 MB RAM per worker, a Python entrypoint, and a safe output filename such as `model.pt`. The upload is capped at 100 MB by Spring; the ZIP validator caps expanded data at 1 GB and rejects unsafe paths and very large entry counts. Student run ownership/status history is saved per account; active run control state remains in memory.
 
 ## 7. Configuration and ports
 
@@ -254,7 +256,7 @@ Submission currently supports 2–3 workers, positive CPU requests, at least 512
 | `rendezvous.master-url` / `JSONBIN_MASTER_URL` | blank | Optional explicit Master URL to publish/use |
 | `JSONBIN_BIN_ID` | Project bin ID | Environment override for bin ID |
 | `idlegrid.storage.directory` | `./storage` | Persistent file contents and `index.json` |
-| `idlegrid.training.directory` | OS temp `idlegrid-training-runs` | DDP bundles and artifacts |
+| `idlegrid.training.directory` | `storage/training` under the backend working directory | DDP bundles and artifacts |
 | Multipart maximum | `100MB` | Spring upload and request limit |
 
 The backend also listens on UDP **9091** for `IDLEGRID_DISCOVER_MASTER` and responds with its HTTP port.
@@ -364,6 +366,10 @@ A locally built image with this tag lets the Agent's image inspection succeed wi
 │   ├── src/pages/                    # Overview, booking, jobs, storage, DDP screens
 │   ├── src/api/idleGridApi.js        # Browser-to-Master API client
 │   └── vite.config.js                # Local API proxy and port 5173
+├── client/
+│   ├── src/ClientApp.jsx              # Student dashboard and authenticated job controls
+│   ├── src/api.js                     # Authenticated student API client
+│   └── README.md                      # Account setup and client run instructions
 ├── public-landing-page/
 │   ├── src/                          # Public download/onboarding site
 │   └── public/downloads/             # Static Agent ZIP published with the site
@@ -391,9 +397,9 @@ The repository's `vercel.json` specifies a Vite build (`npm install`, `npm run b
 
 ## 11. Current limitations and risks
 
-- **Prototype control state:** nodes, jobs, bookings, and DDP run state disappear when the Master restarts. There is no database or job checkpointing.
-- **No authentication:** dashboard and API calls are open. Treat the network as trusted; do not expose the Master publicly as-is.
-- **Bearer file keys:** possession of a file key grants download access. Keys are shown in the UI and there are no user accounts/ownership controls.
+- **Prototype control state:** node/booking state and active job/DDP execution state disappear when the Master restarts. Student job/DDP history remains on disk and marks interrupted work. There is no database or job checkpointing.
+- **Partial authentication:** configured-account login and per-user ownership protect the student `/client/**` API only. Operator/dashboard and Agent API calls remain open. Treat the network as trusted; do not expose the Master publicly as-is.
+- **Bearer file keys:** student UI file lists/downloads are account-scoped, while the existing operator storage API and intentionally shared file keys remain available on the trusted network.
 - **Storage durability:** the Master primary copy and JSON index persist locally, but worker replicas are best-effort. There is no repair/rebalance guarantee for every worker-disk failure or Master-disk loss.
 - **Capacity estimates:** CPU, RAM, and disk are sampled periodically and may change between heartbeat and placement. They are estimates, not reservations enforced by the host OS at the scheduler level.
 - **Job failure:** ordinary jobs can be requeued when a node heartbeat expires; DDP worker loss fails the run. No checkpoint/restart protocol exists.
@@ -429,8 +435,8 @@ A project report or slide deck can follow this sequence:
 7. **Shared storage:** Master primary file, access key, worker replica tasks, metadata/status.
 8. **Distributed training:** one rank per PC, identical bundle distribution, `DistributedSampler`, gradient synchronization, rank-zero artifact.
 9. **Implementation/demo evidence:** screenshots, logs, command examples, measured observations, and known failures.
-10. **Limitations:** no auth/database/checkpointing, best-effort replicas, network dependencies, pending image publication if unresolved.
-11. **Future work:** persistent control database, auth/quotas, fault-tolerant training/checkpoints, improved scheduling, stronger isolation/monitoring—clearly labelled future work.
+10. **Limitations:** prototype student auth, no relational database/checkpointing, best-effort replicas, network dependencies, pending image publication if unresolved.
+11. **Future work:** persistent control database and identity provider, fault-tolerant training/checkpoints, improved scheduling, stronger isolation/monitoring—clearly labelled future work.
 
 ## 14. Glossary
 

@@ -1,20 +1,24 @@
 package com.idlegrid.backend.model;
 
+import java.time.Instant;
+
 public class Job {
     private String id;
+    private Instant createdAt = Instant.now();
     private double cpuReq;
     private int ramReqMb;
     private String command;
     private String image;
     private String networkMode;
     private String distributedTrainingRunId;
-    private JobStatus status = JobStatus.QUEUED;
+    private volatile JobStatus status = JobStatus.QUEUED;
     private String assignedNode;
     private String result;
     private Integer sshPort;
     private String nodeIp;
     private String targetNodeId;
     private int durationMinutes;
+    private volatile boolean cancelRequested;
 
 
     public Job() {
@@ -33,6 +37,9 @@ public class Job {
     public String getId() {
         return id;
     }
+
+    public Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 
     public void setId(String id) {
         this.id = id;
@@ -126,4 +133,7 @@ public class Job {
     public void setDurationMinutes(int durationMinutes) {
         this.durationMinutes = durationMinutes;
     }
+
+    public boolean isCancelRequested() { return cancelRequested; }
+    public void setCancelRequested(boolean cancelRequested) { this.cancelRequested = cancelRequested; }
 }

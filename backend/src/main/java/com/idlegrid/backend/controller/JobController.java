@@ -107,8 +107,33 @@ public class JobController {
         }
 
         job.setResult(req.result());
-        job.setStatus(req.success() ? JobStatus.DONE : JobStatus.FAILED);
+        job.setStatus(job.isCancelRequested() ? JobStatus.CANCELLED
+                : req.success() ? JobStatus.DONE : JobStatus.FAILED);
 
         return ResponseEntity.ok(job);
+    }
+
+    /** Requests release of a submitted session/job. Running containers are stopped by their Agent. */
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<Job> cancel(@PathVariable String id) {
+        Job job = jobStore.get(id);
+        if (job == null) return ResponseEntity.notFound().build();
+        synchronized (job) {
+            if (job.getDistributedTrainingRunId() != null) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).body(job);
+            }
+            if (job.getStatus() == JobStatus.CANCELLED) return ResponseEntity.ok(job);
+            if (job.getStatus() == JobStatus.DONE || job.getStatus() == JobStatus.FAILED) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).body(job);
+            }
+            if (job.getStatus() == JobStatus.QUEUED || job.getStatus() == JobStatus.ASSIGNED) {
+                job.setCancelRequested(true);
+                job.setStatus(JobStatus.CANCELLED);
+                job.setResult("Cancelled before the session started.");
+                return ResponseEntity.ok(job);
+            }
+            job.setCancelRequested(true);
+            return ResponseEntity.accepted().body(job);
+        }
     }
 }

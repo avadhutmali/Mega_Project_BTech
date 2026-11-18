@@ -53,7 +53,7 @@ public class JobPoller implements Runnable {
         try {
             // Don't poll if we're already running a job
             if (executor.isRunning()) {
-                LOG.fine("Job already running — skipping poll");
+                checkForReleaseRequest();
                 return;
             }
 
@@ -79,6 +79,17 @@ public class JobPoller implements Runnable {
         } catch (Exception e) {
             // Never crash the scheduled loop
             LOG.warning("JobPoller threw: " + e.getMessage());
+        }
+    }
+
+    private void checkForReleaseRequest() {
+        String jobId = executor.getRunningJobId();
+        if (jobId == null) return;
+        String path = "/agent/" + config.getNodeId() + "/jobs/" + jobId + "/cancel-requested";
+        HttpResponse<String> response = http.get(path);
+        if (response != null && response.statusCode() == 200
+                && "true".equalsIgnoreCase(response.body().trim())) {
+            executor.cancelByUser();
         }
     }
 

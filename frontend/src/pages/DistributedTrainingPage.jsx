@@ -1,4 +1,4 @@
-import { AlertTriangle, Brain, CheckCircle2, Download, Play, Upload } from 'lucide-react'
+import { AlertTriangle, Brain, CheckCircle2, Clock3, Download, Play, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { idleGridApi } from '../api/idleGridApi'
 
@@ -15,8 +15,30 @@ export default function DistributedTrainingPage() {
   const [form, setForm] = useState(initial)
   const [bundle, setBundle] = useState(null)
   const [run, setRun] = useState(null)
+  const [runs, setRuns] = useState([])
+  const [loadingRuns, setLoadingRuns] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    idleGridApi.getTrainingRuns()
+      .then((items) => {
+        if (!active) return
+        const available = items || []
+        setRuns(available)
+        const lastRunId = window.localStorage.getItem('idlegrid-last-training-run')
+        const restored = available.find((item) => item.runId === lastRunId) || available[0] || null
+        setRun(restored)
+      })
+      .catch((e) => { if (active) setError(e.message || 'Could not load previous training runs') })
+      .finally(() => { if (active) setLoadingRuns(false) })
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (run?.runId) window.localStorage.setItem('idlegrid-last-training-run', run.runId)
+  }, [run?.runId])
 
   useEffect(() => {
     if (!run?.runId || ['COMPLETED', 'FAILED'].includes(run.status)) return undefined
@@ -24,7 +46,10 @@ export default function DistributedTrainingPage() {
     const refresh = async () => {
       try {
         const next = await idleGridApi.getTrainingRun(run.runId)
-        if (active) setRun(next)
+        if (active) {
+          setRun(next)
+          setRuns((current) => [next, ...current.filter((item) => item.runId !== next.runId)])
+        }
       } catch (e) {
         if (active) setError(e.message || 'Could not refresh training status')
       }
@@ -48,6 +73,7 @@ export default function DistributedTrainingPage() {
         ramReqMb: Number(form.ramReqMb),
       })
       setRun(created)
+      setRuns((current) => [created, ...current.filter((item) => item.runId !== created.runId)])
     } catch (e) {
       setError(e.message || 'Could not start distributed training')
     } finally {
@@ -118,6 +144,14 @@ export default function DistributedTrainingPage() {
       {run.error && <p className="mt-3 text-sm text-red-600">{run.error}</p>}
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{(run.workers || []).map((worker) => <div key={worker.rank} className="rounded-xl border border-black/[0.07] p-4 dark:border-white/[0.08]"><div className="flex items-center justify-between text-sm font-semibold"><span>Rank {worker.rank}</span>{worker.status === 'DONE' ? <CheckCircle2 size={16} className="text-emerald-600" /> : <span className="font-mono text-[10px] text-black/45 dark:text-white/45">{worker.status}</span>}</div><p className="mt-2 font-mono text-xs text-black/50 dark:text-white/50">{worker.nodeId || 'Waiting for worker'} {worker.nodeIp ? `· ${worker.nodeIp}` : ''}</p>{worker.output && <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-black/[0.04] p-2 font-mono text-[10px] leading-4 dark:bg-black/20">{worker.output}</pre>}</div>)}</div>
     </section>}
+
+    <section className="mt-7 rounded-2xl border border-black/[0.07] bg-white p-5 dark:border-white/[0.08] dark:bg-[#211c19]">
+      <div className="flex items-center gap-2"><Clock3 size={16} className="text-ember" /><h2 className="font-display text-xl">Previous training runs</h2></div>
+      <p className="mt-1 text-xs text-black/45 dark:text-white/45">Runs reload from the Master when this page is refreshed. The current prototype clears run history if the Master process itself restarts.</p>
+      {loadingRuns ? <p className="mt-4 text-sm text-black/45 dark:text-white/45">Loading run history…</p>
+        : runs.length ? <div className="mt-4 space-y-2">{runs.map((item) => <button key={item.runId} type="button" onClick={() => { setRun(item); setError('') }} className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition ${run?.runId === item.runId ? 'border-ember/40 bg-ember-soft/50 dark:bg-ember/10' : 'border-black/[0.07] hover:bg-black/[0.02] dark:border-white/[0.08] dark:hover:bg-white/[0.03]'}`}><span className="min-w-0"><span className="block truncate font-mono text-xs">{item.runId}</span><span className="mt-1 block text-[10px] text-black/40 dark:text-white/40">{item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Creation time unavailable'} · {item.workerCount} workers</span></span><span className={`shrink-0 font-mono text-[10px] font-semibold ${item.status === 'COMPLETED' ? 'text-emerald-600' : item.status === 'FAILED' ? 'text-red-600' : 'text-amber-600'}`}>{item.status}</span></button>)}</div>
+        : <p className="mt-4 text-sm text-black/45 dark:text-white/45">No training runs are recorded yet.</p>}
+    </section>
   </div>
 }
 

@@ -1,4 +1,4 @@
-import { ArrowUpRight, CheckCircle2, CircleDashed, Clock3, Copy, LoaderCircle, Terminal, XCircle } from 'lucide-react'
+import { ArrowUpRight, Ban, CheckCircle2, CircleDashed, Clock3, Copy, LoaderCircle, Terminal, XCircle } from 'lucide-react'
 import { useState } from 'react'
 
 const statusMap = {
@@ -7,11 +7,12 @@ const statusMap = {
   RUNNING:  { icon: LoaderCircle, className: 'text-blue-600 dark:text-blue-400' },
   DONE:     { icon: CheckCircle2, className: 'text-emerald-600 dark:text-emerald-400' },
   FAILED:   { icon: XCircle,      className: 'text-red-600 dark:text-red-400' },
+  CANCELLED:{ icon: Ban,          className: 'text-black/40 dark:text-white/40' },
 }
 
 export default function JobTable({ jobs, compact = false }) {
   const visibleJobs = compact ? jobs.slice(0, 5) : [...jobs].sort((a, b) => {
-    const order = { RUNNING: 0, ASSIGNED: 1, QUEUED: 2, DONE: 3, FAILED: 4 }
+    const order = { RUNNING: 0, ASSIGNED: 1, QUEUED: 2, DONE: 3, FAILED: 4, CANCELLED: 5 }
     return (order[a.status] ?? 5) - (order[b.status] ?? 5)
   })
 

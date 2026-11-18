@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 /**
  * IdleGrid Master node.
  *
- * Phase 1 scope: in-memory node/job registry, no database, no auth.
+ * Phase 1 scope: in-memory cluster control with a small file-backed student account/history layer.
  * See /docs/PROJECT_CONTEXT.md at the repo root for full architecture context.
  */
 @SpringBootApplication

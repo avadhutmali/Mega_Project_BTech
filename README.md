@@ -1,14 +1,16 @@
 # IdleGrid
 
-IdleGrid is a campus-lab compute prototype. A Spring Boot Master tracks lab PCs, schedules containerized jobs, manages shared files with worker replicas, and coordinates CPU-first PyTorch DDP runs. Java Agents on Windows PCs report capacity and run Docker containers; a React dashboard provides monitoring and submission screens.
+IdleGrid is a campus-lab compute prototype. A Spring Boot Master tracks lab PCs, schedules containerized jobs, manages shared files with worker replicas, and coordinates CPU-first PyTorch DDP runs. Java Agents on Windows PCs report capacity and run Docker containers. Separate React apps provide operator monitoring and resource-limited student job access.
 
 ## Project documentation
 
 - [Detailed project and technical guide](DETAILED_README.md) — architecture, workflows, APIs, setup, limitations, demo plan, and report/PPT outline.
 - [Backend API and setup](backend/README.md)
 - [Backend run instructions](backend/HOW_TO_RUN.md)
+- [Student client setup and accounts](client/README.md)
 - [Agent setup and configuration](agent/README.md)
 - [Project motivation and roadmap context](docs/PROJECT_CONTEXT.md)
+- [PyTorch DDP learning guide](docs/DDP_DISTRIBUTED_TRAINING_GUIDE.md)
 - [PyTorch DDP example](examples/distributed-image-training/README.md)
 
 ## Quick start
@@ -30,6 +32,8 @@ npm run dev
 
 Open `http://localhost:5173`. Extract the Windows Agent ZIP, configure `agent.properties` if automatic Master discovery is unavailable, and start `run-agent.bat`. See the detailed guide for Docker/WSL2, DDP networking, and storage setup.
 
+For the separate student dashboard, run `npm install && npm run dev` from `client/` and open `http://localhost:5174`; students can register there. Set `IDLEGRID_CLIENT_USERS` on the Master only if you want to preload accounts.
+
 ## Current scope
 
-This is a prototype for a trusted lab network. Node/job/booking/training-run control state is in memory; there is no authentication or database. Shared file bytes and a JSON index persist on the Master filesystem. Multi-node DDP needs direct TCP connectivity and an available worker image; a public GHCR package alone does not guarantee the required image tag has been published.
+This is a prototype for a trusted lab network. Node/booking and active job/run control state are in memory. Student accounts, uploaded-file ownership, and per-user job/DDP history are stored on the Master filesystem; student sessions remain in memory. Student client APIs are account-scoped, while operator/dashboard and Agent APIs remain separate and are not protected by student login. Multi-node DDP needs direct TCP connectivity and an available worker image; a public GHCR package alone does not guarantee the required image tag has been published.

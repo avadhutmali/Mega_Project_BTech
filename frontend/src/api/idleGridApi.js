@@ -32,6 +32,7 @@ export const idleGridApi = {
   }),
   deleteBooking: (bookingId) => request(`/bookings/${bookingId}`, { method: 'DELETE' }),
   getJobStatus: (jobId) => request(`/jobs/${jobId}/status`),
+  cancelJob: (jobId) => request(`/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
   submitJob: (payload) => request('/jobs/submit', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -60,5 +61,6 @@ export const idleGridApi = {
     return response.json()
   },
   getTrainingRun: (runId) => request(`/distributed-training/runs/${encodeURIComponent(runId)}`),
+  getTrainingRuns: () => request('/distributed-training/runs'),
   trainingArtifactUrl: (runId) => `${API_BASE}/distributed-training/runs/${encodeURIComponent(runId)}/artifact`,
 }

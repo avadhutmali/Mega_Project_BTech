@@ -37,14 +37,25 @@ public class AgentController {
      */
     @GetMapping("/{nodeId}/assignment")
     public ResponseEntity<Job> assignment(@PathVariable String nodeId) {
-        return jobStore.byStatus(JobStatus.ASSIGNED).stream()
-                .filter(j -> nodeId.equals(j.getAssignedNode()))
-                .findFirst()
-                .map(job -> {
-                    job.setStatus(JobStatus.RUNNING);
-                    return ResponseEntity.ok(job);
-                })
-                .orElse(ResponseEntity.noContent().build());
+        for (Job job : jobStore.byStatus(JobStatus.ASSIGNED)) {
+            if (!nodeId.equals(job.getAssignedNode())) continue;
+            synchronized (job) {
+                // Cancellation and assignment can arrive at the same time.
+                // Recheck under the job lock so a cancelled session is never run.
+                if (job.getStatus() != JobStatus.ASSIGNED) continue;
+                job.setStatus(JobStatus.RUNNING);
+                return ResponseEntity.ok(job);
+            }
+        }
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{nodeId}/jobs/{jobId}/cancel-requested")
+    public ResponseEntity<Boolean> cancellationRequested(@PathVariable String nodeId,
+                                                         @PathVariable String jobId) {
+        Job job = jobStore.get(jobId);
+        if (job == null || !nodeId.equals(job.getAssignedNode())) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(job.isCancelRequested());
     }
 
     @GetMapping("/{nodeId}/storage/assignment")

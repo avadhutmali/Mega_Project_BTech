@@ -50,7 +50,7 @@ public class DistributedTrainingService {
         this.runStore = runStore;
         this.scheduler = scheduler;
         String directory = configuredDirectory == null || configuredDirectory.isBlank()
-                ? Paths.get(System.getProperty("java.io.tmpdir"), "idlegrid-training-runs").toString()
+                ? Paths.get("storage", "training").toString()
                 : configuredDirectory;
         this.runsDirectory = Paths.get(directory).toAbsolutePath().normalize();
     }
@@ -149,6 +149,16 @@ public class DistributedTrainingService {
         return Files.isRegularFile(path) ? path : null;
     }
 
+    /** Resolve a completed student's artifact after its run metadata has been restored from history. */
+    public Path artifactPathFromHistory(String runId, String outputFile) {
+        if (runId == null || !runId.matches("[A-Fa-f0-9-]{36}") || outputFile == null
+                || !SAFE_OUTPUT.matcher(outputFile).matches() || outputFile.contains("..")) return null;
+        Path runDirectory = runsDirectory.resolve(runId).normalize();
+        Path artifact = runDirectory.resolve("artifacts").resolve(outputFile).normalize();
+        return runDirectory.startsWith(runsDirectory) && artifact.startsWith(runDirectory)
+                && Files.isRegularFile(artifact) ? artifact : null;
+    }
+
     private DistributedTrainingStatus status(DistributedTrainingRun run) {
         List<TrainingWorkerStatus> workers = new ArrayList<>();
         boolean running = false;
@@ -221,16 +231,24 @@ public class DistributedTrainingService {
     private String buildWorkerCommand(DistributedTrainingRun run, String command, int rank) {
         String bundleUrl = run.getMasterUrl() + "/distributed-training/runs/" + run.getId() + "/bundle";
         String artifactUrl = run.getMasterUrl() + "/distributed-training/runs/" + run.getId() + "/artifact";
-        String output = shellQuote("/workspace/idlegrid-bundle/" + run.getOutputFile());
+        String entrypoint = command.trim().split("\\s+")[0];
+        String entrypointName = Paths.get(entrypoint).getFileName().toString();
+        String arguments = command.trim().substring(entrypoint.length()).trim();
+        String findEntrypoint = "entrypoint=$(find /workspace/idlegrid-bundle -type f -name "
+                + shellQuote(entrypointName) + " -print -quit); test -n \"$entrypoint\"; "
+                + "cd \"$(dirname \"$entrypoint\")\"; ";
+        String output = "artifact=$(find /workspace/idlegrid-bundle -type f -name "
+                + shellQuote(run.getOutputFile()) + " -print -quit); test -n \"$artifact\"; ";
         return "set -eu; mkdir -p /workspace/idlegrid-bundle; "
                 + "curl -fsS " + shellQuote(bundleUrl) + " -o /workspace/idlegrid-bundle.zip; "
                 + "unzip -oq /workspace/idlegrid-bundle.zip -d /workspace/idlegrid-bundle; "
-                + "cd /workspace/idlegrid-bundle; "
+                + findEntrypoint
                 + "torchrun --nnodes=" + run.getWorkerCount() + " --nproc-per-node=1 --node-rank=" + rank
                 + " --master-addr=" + run.getCoordinatorIp() + " --master-port=" + run.getCoordinatorPort()
-                + " --max-restarts=0 " + command + "; "
-                + (rank == 0 ? "test -f " + output + "; curl -fsS -F "
-                + shellQuote("file=@/workspace/idlegrid-bundle/" + run.getOutputFile()) + " "
+                + " --max-restarts=0 " + shellQuote(entrypointName)
+                + (arguments.isBlank() ? "" : " " + arguments) + "; "
+                + (rank == 0 ? output + "curl -fsS -F "
+                + shellQuote("file=@") + "\"$artifact\" "
                 + shellQuote(artifactUrl) + "; " : "");
     }
 

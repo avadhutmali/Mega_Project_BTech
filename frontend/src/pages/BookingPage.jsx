@@ -1,4 +1,4 @@
-import { CalendarClock, Check, Copy, Cpu, HardDrive, LoaderCircle, Radio, Terminal, X } from 'lucide-react'
+import { CalendarClock, Check, Copy, Cpu, HardDrive, LoaderCircle, Radio, Square, Terminal, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { idleGridApi } from '../api/idleGridApi'
 import { useApp } from '../context/AppContext'
@@ -20,9 +20,27 @@ function shortId(id = '') {
 export default function BookingPage() {
   const { nodes, jobs, refresh } = useApp()
   const [selectedNode, setSelectedNode] = useState(null)
+  const [releasingJobId, setReleasingJobId] = useState(null)
+  const [releaseError, setReleaseError] = useState('')
 
   const activeJobs = jobs.filter(j => j.status === 'RUNNING' || j.status === 'ASSIGNED')
   const onlineNodes = nodes.filter((n) => n.status === 'ONLINE')
+
+  const releaseSession = async (job) => {
+    setReleaseError('')
+    setReleasingJobId(job.id)
+    try {
+      await idleGridApi.cancelJob(job.id)
+      await refresh()
+      return true
+    } catch (e) {
+      setReleaseError(e.message || 'Could not release this session')
+      await refresh()
+      return false
+    } finally {
+      setReleasingJobId(null)
+    }
+  }
 
   return (
     <div className="animate-fade-in">
@@ -39,6 +57,8 @@ export default function BookingPage() {
         </p>
       </div>
 
+      {releaseError && <p role="alert" className="mb-4 rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-sm text-red-600">{releaseError}</p>}
+
       {/* Node grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {!nodes.length && (
@@ -47,12 +67,16 @@ export default function BookingPage() {
           </div>
         )}
         {nodes.map((node) => {
-          const isBooked = activeJobs.some((j) => j.assignedNode === node.id || j.nodeIp === node.ip)
+          const nodeJob = activeJobs.find((j) => j.assignedNode === node.id || j.nodeIp === node.ip)
+          const sessionJob = nodeJob?.durationMinutes > 0 ? nodeJob : null
           return (
             <NodeCard
               key={node.id}
               node={node}
-              isBooked={isBooked}
+              isBooked={Boolean(nodeJob)}
+              sessionJob={sessionJob}
+              releasePending={releasingJobId === sessionJob?.id || Boolean(nodeJob?.cancelRequested)}
+              onRelease={releaseSession}
               onBook={() => setSelectedNode(node)}
             />
           )
@@ -63,6 +87,7 @@ export default function BookingPage() {
       {selectedNode && (
         <BookingModal
           node={selectedNode}
+          onRelease={releaseSession}
           onClose={() => { setSelectedNode(null); refresh() }}
         />
       )}
@@ -71,14 +96,14 @@ export default function BookingPage() {
 }
 
 // ─── Node Card ──────────────────────────────────────────────────────────────
-function NodeCard({ node, isBooked, onBook }) {
+function NodeCard({ node, isBooked, sessionJob, releasePending, onRelease, onBook }) {
   const online = node.status === 'ONLINE'
   const ramTotalEst = 16384
   const cpuUsedPct  = Math.max(0, Math.min(100, 100 - (node.cpuFree ?? 0)))
   const ramUsedPct  = Math.max(0, Math.min(100, Math.round((ramTotalEst - (node.ramFreeMb ?? 0)) / ramTotalEst * 100)))
 
-  const stateLabel = !online ? 'Offline' : isBooked ? 'Currently Booked' : 'Book this PC'
-  const isDisabled = !online || isBooked
+  const stateLabel = !online ? 'Offline' : sessionJob ? (releasePending ? 'Releasing…' : 'Release session') : isBooked ? 'Currently in use' : 'Book this PC'
+  const isDisabled = !online || (isBooked && !sessionJob) || releasePending
 
   return (
     <div className={`relative overflow-hidden rounded-2xl border p-5 transition
@@ -110,7 +135,7 @@ function NodeCard({ node, isBooked, onBook }) {
 
       <button
         disabled={isDisabled}
-        onClick={onBook}
+        onClick={sessionJob ? () => onRelease(sessionJob) : onBook}
         className={`mt-5 flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.08em] transition
         ${isDisabled 
            ? (isBooked 
@@ -119,7 +144,7 @@ function NodeCard({ node, isBooked, onBook }) {
            : 'border-emerald-500/40 text-emerald-600 hover:bg-emerald-500 hover:text-white dark:text-emerald-400 dark:hover:text-white'
         }`}
       >
-        <Radio size={13} /> {stateLabel}
+        {sessionJob ? <Square size={13} /> : <Radio size={13} />} {stateLabel}
       </button>
     </div>
   )
@@ -142,7 +167,7 @@ function ResourceBar({ label, value, pct }) {
 }
 
 // ─── Booking Modal ────────────────────────────────────────────────────────
-function BookingModal({ node, onClose }) {
+function BookingModal({ node, onClose, onRelease }) {
   const [step, setStep] = useState('form') // 'form' | 'waiting' | 'ready'
   const [durationMinutes, setDurationMinutes] = useState(60)
   const [cpuReq, setCpuReq] = useState(1)
@@ -176,6 +201,9 @@ function BookingModal({ node, onClose }) {
             clearInterval(pollRef.current)
             setSshCommand(`ssh student@${job.nodeIp} -p ${job.sshPort}`)
             setStep('ready')
+          } else if (job.status === 'CANCELLED') {
+            clearInterval(pollRef.current)
+            setStep('released')
           } else if (job.status === 'FAILED') {
             clearInterval(pollRef.current)
             setError('Job failed. Check agent logs on the Windows PC.')
@@ -192,6 +220,14 @@ function BookingModal({ node, onClose }) {
     await navigator.clipboard.writeText(sshCommand)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const release = async () => {
+    if (!jobId) return
+    const previousStep = step
+    setStep('releasing')
+    const accepted = await onRelease({ id: jobId })
+    if (!accepted) setStep(previousStep)
   }
 
   return (
@@ -264,8 +300,13 @@ function BookingModal({ node, onClose }) {
               </p>
               <p className="mt-3 font-mono text-[10px] text-black/30 dark:text-white/30">Job: {jobId?.slice(0, 8)}</p>
             </div>
+            <button onClick={release} className="w-full rounded-xl border border-red-500/30 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-500/5">Release this session</button>
           </div>
         )}
+
+        {step === 'releasing' && <div className="mt-8 py-5 text-center"><LoaderCircle size={30} className="mx-auto animate-spin text-ember" /><p className="mt-3 font-semibold">Releasing the session…</p><p className="mt-1 text-xs text-black/45 dark:text-white/45">The Agent stops the container and confirms release.</p></div>}
+
+        {step === 'released' && <div className="mt-8 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4 text-center"><Check size={20} className="mx-auto text-emerald-600" /><p className="mt-2 font-semibold">Session released</p><p className="mt-1 text-xs text-black/45 dark:text-white/45">This PC is available for another session.</p></div>}
 
         {/* STEP 3: ready */}
         {step === 'ready' && (
@@ -287,6 +328,7 @@ function BookingModal({ node, onClose }) {
             <p className="mt-4 text-center text-xs text-black/40 dark:text-white/40">
               Session runs for {durationMinutes} min · No password required
             </p>
+            <button onClick={release} className="mt-4 w-full rounded-xl border border-red-500/30 py-2.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/5">Release session</button>
           </div>
         )}
       </div>

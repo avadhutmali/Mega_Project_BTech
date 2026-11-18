@@ -66,13 +66,17 @@ public class StorageService {
     }
 
     public synchronized StoredFile upload(MultipartFile upload) throws IOException {
+        return upload(upload, null);
+    }
+
+    public synchronized StoredFile upload(MultipartFile upload, String ownerUsername) throws IOException {
         if (upload == null || upload.isEmpty()) throw new IllegalArgumentException("Choose a non-empty file");
         String original = upload.getOriginalFilename() == null ? "file" : upload.getOriginalFilename();
         String name = Paths.get(original).getFileName().toString();
         String key = UUID.randomUUID().toString();
         StoredFile file = new StoredFile(key, name,
                 upload.getContentType() == null ? "application/octet-stream" : upload.getContentType(),
-                upload.getSize());
+                upload.getSize(), ownerUsername);
         if (Files.getFileStore(filesDir).getUsableSpace() < upload.getSize()) {
             throw new IllegalArgumentException("Master storage does not have enough free disk space");
         }
@@ -85,6 +89,19 @@ public class StorageService {
 
     public Collection<StoredFile> all() {
         return files.values().stream().sorted(Comparator.comparing(StoredFile::getCreatedAt).reversed()).toList();
+    }
+
+    public Collection<StoredFile> allForOwner(String username) {
+        return files.values().stream().filter(file -> username.equals(file.getOwnerUsername()))
+                .sorted(Comparator.comparing(StoredFile::getCreatedAt).reversed()).toList();
+    }
+
+    public Map<String, Object> summaryForOwner(String username) {
+        Map<String, Object> totals = new java.util.HashMap<>(summary());
+        Collection<StoredFile> owned = allForOwner(username);
+        totals.put("fileCount", owned.size());
+        totals.put("primaryStoredBytes", owned.stream().mapToLong(StoredFile::getSizeBytes).sum());
+        return Map.copyOf(totals);
     }
 
     public StoredFile get(String key) { return files.get(key); }

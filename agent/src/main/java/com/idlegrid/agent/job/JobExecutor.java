@@ -112,6 +112,11 @@ public class JobExecutor {
         return runningContainerId.get();
     }
 
+    public String getRunningJobId() {
+        JobModel job = runningJob.get();
+        return job == null ? null : job.getJobId();
+    }
+
     /**
      * Starts the job asynchronously in a dedicated daemon thread.
      * Returns immediately. Only one job runs at a time — subsequent calls
@@ -166,6 +171,19 @@ public class JobExecutor {
         runningJob.set(null);
 
         LOG.info("Eviction complete for job " + job.getJobId());
+    }
+
+    /** Stops a session after its owner requests release from the dashboard. */
+    public void cancelByUser() {
+        JobModel job = runningJob.get();
+        if (job == null || !evicted.compareAndSet(false, true)) return;
+
+        String containerId = runningContainerId.get();
+        LOG.info("Releasing job " + job.getJobId() + " at the user's request");
+        if (containerId != null) killContainer(containerId);
+        reportComplete(job.getJobId(), false, "Session released by user", -3);
+        // executeBlocking owns the running slot and clears it from its finally
+        // block after Docker has exited and the container has been removed.
     }
 
     /**
@@ -253,6 +271,10 @@ public class JobExecutor {
                 if (pullProc.waitFor() != 0) throw new RuntimeException("Could not pull Docker image " + image);
             }
 
+            // A release can arrive while the image is being pulled. Do not start a
+            // container after the Master has accepted that release request.
+            if (evicted.get()) return;
+
             // 4. Start container in detached mode
             //    docker run -d prints the container ID to stdout (one line)
             List<String> startCmd = buildDockerCommand(job, workspace, image);
@@ -283,6 +305,13 @@ public class JobExecutor {
             containerId = containerId.trim();
             runningContainerId.set(containerId);
             LOG.info("Container started: " + containerId + " for job " + job.getJobId());
+
+            // Close the small race where release arrives while `docker run` is
+            // starting and cancelByUser() sees no container ID yet.
+            if (evicted.get()) {
+                killContainer(containerId);
+                return;
+            }
 
             // 3b. Discover the mapped SSH port and report to Master
             int sshPort = discoverMappedPort(containerId, 22);
